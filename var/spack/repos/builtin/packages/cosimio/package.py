@@ -26,25 +26,26 @@ class Cosimio(CMakePackage):
     version("4.0.0", sha256="12f38d1282b41e1ebc1d2c66d799cb7537840495c98638c698215d390403f221")
     version("3.0.0", sha256="02c902c2b28ae71241c4faf33f3e7a44f363b1d9732c53363cd33ffbbbe81eea")
 
-    variant('mpi', default=False, description='Enable MPI')
-    variant('c', default=False, description='Build C API')
+    variant('mpi', default=True, description='Enable MPI')
+    variant('c', default=True, description='Build C API')
     variant('python', default=True, description='Build Python API')
-    variant('fortran', default=False, description='Build FORTRAN API')
+    variant('fortran', default=True, description='Build FORTRAN API')
     variant('testing', default=True, description='Build Testing')
 
     depends_on('cmake@3.13:', type='build')
-    depends_on('mpi', when='+mpi')
+    depends_on('openmpi', when='+mpi')
     depends_on('python', when='+python')
+    depends_on('fortran', when='+fortran')
 
     def cmake_args(self):
         args = [
-            self.define('CO_SIM_IO_BUILD_TYPE', 'Release'),
-            self.define('CO_SIM_IO_BUILD_MPI', 'OFF'),
-            self.define('CO_SIM_IO_BUILD_TESTING', 'ON'),
-            self.define('CO_SIM_IO_BUILD_C', 'OFF'),
-            self.define('CO_SIM_IO_BUILD_PYTHON', 'ON'),
-            self.define('CO_SIM_IO_BUILD_FORTRAN', 'OFF'),
-            self.define('CO_SIM_IO_STRICT_COMPILER', 'OFF')
+            self.define('CO_SIM_IO_BUILD_TYPE',  'Release'),
+            self.define('CO_SIM_IO_BUILD_MPI',        'ON'),
+            self.define('CO_SIM_IO_BUILD_TESTING',    'ON'),
+            self.define('CO_SIM_IO_BUILD_C',          'ON'),
+            self.define('CO_SIM_IO_BUILD_PYTHON',     'ON'),
+            self.define('CO_SIM_IO_BUILD_FORTRAN',    'ON'),
+            self.define('CO_SIM_IO_STRICT_COMPILER',  'ON')
         ]
 
         if '+mpi' in self.spec:
