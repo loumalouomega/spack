@@ -6,8 +6,11 @@
 from spack import *
 
 class Cosimio(CMakePackage):
-    """The CoSimIO is a small library for interprocess communication in CoSimulation contexts. It is designed for exchanging data between different solvers or other software-tools. For performing coupled simulations it is used in combination with the CoSimulationApplication.
-    It is implemented as a detached interface. This means that it follows the interface of Kratos but is independent of Kratos, which allows for an easy integration into other codes / solvers
+    """The CoSimIO is a small library for interprocess communication in CoSimulation contexts.
+    It is designed for exchanging data between different solvers or other software-tools.
+    For performing coupled simulations it is used in combination with the CoSimulationApplication.
+    It is implemented as a detached interface. This means that it follows the interface of
+    Kratos but is independent of Kratos, which allows for an easy integration into other codes / solvers.
     """
 
     tags = ["fem", "finite-elements", "hpc", "cosimulation", "coupling"]
@@ -39,27 +42,19 @@ class Cosimio(CMakePackage):
     def cmake_args(self):
         args = [
             self.define('CO_SIM_IO_BUILD_TYPE',  'Release'),
-            self.define('CO_SIM_IO_BUILD_MPI',        'ON'),
-            self.define('CO_SIM_IO_BUILD_TESTING',    'ON'),
-            self.define('CO_SIM_IO_BUILD_C',          'ON'),
-            self.define('CO_SIM_IO_BUILD_PYTHON',     'ON'),
-            self.define('CO_SIM_IO_BUILD_FORTRAN',    'ON'),
             self.define('CO_SIM_IO_STRICT_COMPILER',  'ON')
         ]
 
-        if '+mpi' in self.spec:
-            args.append(self.define('CO_SIM_IO_BUILD_MPI', 'ON'))
+        options = {
+            'mpi'    : 'CO_SIM_IO_BUILD_MPI',
+            'c'      : 'CO_SIM_IO_BUILD_C',
+            'python' : 'CO_SIM_IO_BUILD_PYTHON',
+            'fortran': 'CO_SIM_IO_BUILD_FORTRAN',
+            'testing': 'CO_SIM_IO_BUILD_TESTING',
+        }
 
-        if '+c' in self.spec:
-            args.append(self.define('CO_SIM_IO_BUILD_C', 'ON'))
-
-        if '+python' in self.spec:
-            args.append(self.define('CO_SIM_IO_BUILD_PYTHON', 'ON'))
-
-        if '+fortran' in self.spec:
-            args.append(self.define('CO_SIM_IO_BUILD_FORTRAN', 'ON'))
-
-        if '+testing' in self.spec:
-            args.append(self.define('CO_SIM_IO_BUILD_TESTING', 'ON'))
+        for var, cmake_opt in options.items():
+            if '+' + var in self.spec:
+                args.append(self.define(cmake_opt, 'ON'))
 
         return args
