@@ -35,7 +35,7 @@ class Cosimio(CMakePackage):
     variant('testing', default=True, description='Build Testing')
 
     depends_on('cmake@3.13:', type='build')
-    depends_on('openmpi', when='+mpi')
+    depends_on('openmpi', when='+mpi') # TODO: Add options related intel-mpi
     depends_on('python', when='+python')
     depends_on('fortran', when='+fortran')
 
