@@ -53,7 +53,6 @@ class Cosimio(CMakePackage):
         ]
 
         options = {
-            'mpi'    : 'CO_SIM_IO_BUILD_MPI',
             'c'      : 'CO_SIM_IO_BUILD_C',
             'python' : 'CO_SIM_IO_BUILD_PYTHON',
             'fortran': 'CO_SIM_IO_BUILD_FORTRAN',
@@ -63,6 +62,12 @@ class Cosimio(CMakePackage):
         for var, cmake_opt in options.items():
             if '+' + var in self.spec:
                 args.append(self.define(cmake_opt, 'ON'))
+
+        # Deactivate MPI if requested
+        if 'mpi=None' in self.spec:
+            args.append(self.define('CO_SIM_IO_BUILD_MPI', 'OFF'))
+        else: # Activate MPI otherwise
+            args.append(self.define('CO_SIM_IO_BUILD_MPI', 'ON'))
 
         return args
 
