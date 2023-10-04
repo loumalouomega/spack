@@ -37,7 +37,6 @@ class Cosimio(CMakePackage):
     depends_on('cmake@3.13:', type='build')
     depends_on('openmpi', when='+mpi') # TODO: Add options related intel-mpi
     depends_on('python', when='+python')
-    depends_on('fortran', when='+fortran')
 
     def cmake_args(self):
         args = [
@@ -58,3 +57,20 @@ class Cosimio(CMakePackage):
                 args.append(self.define(cmake_opt, 'ON'))
 
         return args
+
+    def flag_handler(self, name, flags):
+        spec = self.spec
+        if name == "ldflags":
+            # Fortran lib (assumes clang is built with gfortran!)
+            if "+fortran" in spec and spec.compiler.name in ["gcc", "clang", "apple-clang"]:
+                fc = Executable(self.compiler.fc)
+                libgfortran = fc(
+                    "--print-file-name", "libgfortran." + dso_suffix, output=str
+                ).strip()
+                # if libgfortran is equal to "libgfortran.<dso_suffix>" then
+                # print-file-name failed, use static library instead
+                if libgfortran == "libgfortran." + dso_suffix:
+                    libgfortran = fc("--print-file-name", "libgfortran.a", output=str).strip()
+                # -L<libdir> -lgfortran required for OSX
+                # https://github.com/spack/spack/pull/25823#issuecomment-917231118
+                flags.append("-L{0} -lgfortran".format(os.path.dirname(libgfortran)))
