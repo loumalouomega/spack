@@ -31,7 +31,7 @@ class Cosimio(CMakePackage):
     variant('mpi', default=True, description='Enable MPI')
     variant('c', default=True, description='Build C API')
     variant('python', default=True, description='Build Python API')
-    variant('fortran', default=True, description='Build FORTRAN API')
+    variant('fortran', default=False, description='Build FORTRAN API')
     variant('testing', default=True, description='Build Testing')
 
     depends_on('cmake@3.13:', type='build')
