@@ -28,15 +28,23 @@ class Cosimio(CMakePackage):
     version("4.0.0", sha256="12f38d1282b41e1ebc1d2c66d799cb7537840495c98638c698215d390403f221")
     version("3.0.0", sha256="02c902c2b28ae71241c4faf33f3e7a44f363b1d9732c53363cd33ffbbbe81eea")
 
-    variant('mpi', default=True, description='Enable MPI')
+    variant('mpi', default='openmpi', description='Enable MPI support', values=('none', 'openmpi', 'intel-mpi'), multi=True)
     variant('c', default=True, description='Build C API')
     variant('python', default=True, description='Build Python API')
     variant('fortran', default=False, description='Build FORTRAN API')
     variant('testing', default=True, description='Build Testing')
 
     depends_on('cmake@3.13:', type='build')
-    depends_on('openmpi', when='+mpi') # TODO: Add options related intel-mpi
+    depends_on('openmpi', when='mpi=openmpi')
+    depends_on('intel-mpi', when='mpi=intel-mpi')
     depends_on('python', when='+python')
+
+    def edit(self, spec, prefix):
+        # Set Intel compiler for intel-mpi
+        if 'mpi=intel-mpi' in self.spec:
+            env['CC'] = 'mpiicc'
+            env['CXX'] = 'mpiicpc'
+            env['FC'] = 'mpiifort'
 
     def cmake_args(self):
         args = [
@@ -58,19 +66,19 @@ class Cosimio(CMakePackage):
 
         return args
 
-    def flag_handler(self, name, flags):
-        spec = self.spec
-        if name == "ldflags":
-            # Fortran lib (assumes clang is built with gfortran!)
-            if "+fortran" in spec and spec.compiler.name in ["gcc", "clang", "apple-clang"]:
-                fc = Executable(self.compiler.fc)
-                libgfortran = fc(
-                    "--print-file-name", "libgfortran." + dso_suffix, output=str
-                ).strip()
-                # if libgfortran is equal to "libgfortran.<dso_suffix>" then
-                # print-file-name failed, use static library instead
-                if libgfortran == "libgfortran." + dso_suffix:
-                    libgfortran = fc("--print-file-name", "libgfortran.a", output=str).strip()
-                # -L<libdir> -lgfortran required for OSX
-                # https://github.com/spack/spack/pull/25823#issuecomment-917231118
-                flags.append("-L{0} -lgfortran".format(os.path.dirname(libgfortran)))
+    # def flag_handler(self, name, flags):
+    #     spec = self.spec
+    #     if name == "ldflags":
+    #         # Fortran lib (assumes clang is built with gfortran!)
+    #         if "+fortran" in spec and spec.compiler.name in ["gcc", "clang", "apple-clang"]:
+    #             fc = Executable(self.compiler.fc)
+    #             libgfortran = fc(
+    #                 "--print-file-name", "libgfortran." + dso_suffix, output=str
+    #             ).strip()
+    #             # if libgfortran is equal to "libgfortran.<dso_suffix>" then
+    #             # print-file-name failed, use static library instead
+    #             if libgfortran == "libgfortran." + dso_suffix:
+    #                 libgfortran = fc("--print-file-name", "libgfortran.a", output=str).strip()
+    #             # -L<libdir> -lgfortran required for OSX
+    #             # https://github.com/spack/spack/pull/25823#issuecomment-917231118
+    #             flags.append("-L{0} -lgfortran".format(os.path.dirname(libgfortran)))
