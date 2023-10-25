@@ -169,6 +169,22 @@ def test_checksum_interactive_quit_from_ask_each():
     }
 
 
+def test_checksum_interactive_nothing_left():
+    """If nothing is left after interactive filtering, return an empty dict."""
+    input = input_from_commands("f", "@2", "c")
+    assert (
+        interactive_version_filter(
+            {
+                Version("1.1"): "https://www.example.com/pkg-1.1.tar.gz",
+                Version("1.0"): "https://www.example.com/pkg-1.0.tar.gz",
+                Version("0.9"): "https://www.example.com/pkg-0.9.tar.gz",
+            },
+            input=input,
+        )
+        == {}
+    )
+
+
 def test_checksum_interactive_new_only():
     # The 1.0 version is known already, and should be dropped on `n`.
     input = input_from_commands("n", "c")
@@ -184,6 +200,29 @@ def test_checksum_interactive_new_only():
         Version("1.1"): "https://www.example.com/pkg-1.1.tar.gz",
         Version("0.9"): "https://www.example.com/pkg-0.9.tar.gz",
     }
+
+
+def test_checksum_interactive_top_n():
+    """Test integers select top n versions"""
+    input = input_from_commands("2", "c")
+    assert interactive_version_filter(
+        {
+            Version("1.1"): "https://www.example.com/pkg-1.1.tar.gz",
+            Version("1.0"): "https://www.example.com/pkg-1.0.tar.gz",
+            Version("0.9"): "https://www.example.com/pkg-0.9.tar.gz",
+        },
+        input=input,
+    ) == {
+        Version("1.1"): "https://www.example.com/pkg-1.1.tar.gz",
+        Version("1.0"): "https://www.example.com/pkg-1.0.tar.gz",
+    }
+
+
+def test_checksum_interactive_unrecognized_command():
+    """Unrecognized commands should be ignored"""
+    input = input_from_commands("-1", "0", "hello", "c")
+    v = {Version("1.1"): "https://www.example.com/pkg-1.1.tar.gz"}
+    assert interactive_version_filter(v.copy(), input=input) == v
 
 
 def test_checksum_versions(mock_packages, mock_clone_repo, mock_fetch, mock_stage):
