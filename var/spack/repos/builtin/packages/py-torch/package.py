@@ -103,7 +103,7 @@ class PyTorch(PythonPackage, CudaPackage, ROCmPackage):
         "breakpad",
         default=True,
         description="Enable breakpad crash dump library",
-        when="@1.9:1.11",
+        when="@1.10:1.11",
     )
 
     conflicts("+cuda+rocm")
@@ -198,8 +198,7 @@ class PyTorch(PythonPackage, CudaPackage, ROCmPackage):
     # depends_on("sleef@3.5.1_2020-12-22", when="@1.8:")
     # https://github.com/pytorch/pytorch/issues/60334
     # depends_on("sleef@3.4.0_2019-07-30", when="@1.6:1.7")
-    # https://github.com/Maratyszcza/FP16/issues/18
-    # depends_on("fp16@2020-05-14", when="@1.6:")
+    depends_on("fp16@2020-05-14", when="@1.6:")
     depends_on("pthreadpool@2021-04-13", when="@1.9:")
     depends_on("pthreadpool@2020-10-05", when="@1.8")
     depends_on("pthreadpool@2020-06-15", when="@1.6:1.7")
@@ -247,14 +246,14 @@ class PyTorch(PythonPackage, CudaPackage, ROCmPackage):
     # depends_on("xnnpack@2021-02-22", when="@1.8:1.9+xnnpack")
     # depends_on("xnnpack@2020-03-23", when="@1.6:1.7+xnnpack")
     depends_on("mpi", when="+mpi")
-    # https://github.com/pytorch/pytorch/issues/60270
-    # depends_on("gloo@2023-05-19", when="@2.1:+gloo")
-    # depends_on("gloo@2023-01-17", when="@2.0+gloo")
-    # depends_on("gloo@2022-05-18", when="@1.13:1+gloo")
-    # depends_on("gloo@2021-05-21", when="@1.10:1.12+gloo")
-    # depends_on("gloo@2021-05-04", when="@1.9+gloo")
-    # depends_on("gloo@2020-09-18", when="@1.7:1.8+gloo")
-    # depends_on("gloo@2020-03-17", when="@1.6+gloo")
+    depends_on("gloo@2023-05-19", when="@2.1:+gloo")
+    depends_on("gloo@2023-01-17", when="@2.0+gloo")
+    depends_on("gloo@2022-05-18", when="@1.13:1+gloo")
+    depends_on("gloo@2021-05-21", when="@1.10:1.12+gloo")
+    depends_on("gloo@2021-05-04", when="@1.9+gloo")
+    depends_on("gloo@2020-09-18", when="@1.7:1.8+gloo")
+    depends_on("gloo@2020-03-17", when="@1.6+gloo")
+    depends_on("gloo+cuda", when="@1.6:+gloo+cuda")
     # https://github.com/pytorch/pytorch/issues/60331
     # depends_on("onnx@1.14.1", when="@2.1:+onnx_ml")
     # depends_on("onnx@1.13.1", when="@2.0+onnx_ml")
@@ -271,6 +270,13 @@ class PyTorch(PythonPackage, CudaPackage, ROCmPackage):
     depends_on("py-six", type="test")
     depends_on("py-psutil", type="test")
 
+    # https://github.com/pytorch/pytorch/issues/90448
+    patch(
+        "https://github.com/pytorch/pytorch/pull/97270.patch?full_index=1",
+        sha256="beb3fb57746cf8443f5caa6e08b2f8f4d4822c1e11e0c912134bd166c6a0ade7",
+        when="@1.10:2.0",
+    )
+
     # Fix BLAS being overridden by MKL
     # https://github.com/pytorch/pytorch/issues/60328
     patch(
@@ -284,6 +290,14 @@ class PyTorch(PythonPackage, CudaPackage, ROCmPackage):
         "https://github.com/pytorch/pytorch/pull/55063.patch?full_index=1",
         sha256="2229bcbf20fbe88aa9f7318f89c126ec7f527875ffe689a763c78abfa127a65c",
         when="@1.1:1.8.1",
+    )
+
+    # https://github.com/pytorch/pytorch/issues/70297
+    patch(
+        "https://github.com/google/breakpad/commit/605c51ed96ad44b34c457bbca320e74e194c317e.patch?full_index=1",
+        sha256="694d83db3a2147d543357f22ba5c8d5683d0ed43e693d42bca8f24ec50080f98",
+        when="+breakpad",
+        working_dir="third_party/breakpad",
     )
 
     # Fixes CMake configuration error when XNNPACK is disabled
@@ -621,10 +635,8 @@ class PyTorch(PythonPackage, CudaPackage, ROCmPackage):
             # env.set("USE_SYSTEM_LIBS", "ON")
             # https://github.com/pytorch/pytorch/issues/60329
             # env.set("USE_SYSTEM_CPUINFO", "ON")
-            # https://github.com/pytorch/pytorch/issues/60270
-            # env.set("USE_SYSTEM_GLOO", "ON")
-            # https://github.com/Maratyszcza/FP16/issues/18
-            # env.set("USE_SYSTEM_FP16", "ON")
+            env.set("USE_SYSTEM_GLOO", "ON")
+            env.set("USE_SYSTEM_FP16", "ON")
             env.set("USE_SYSTEM_PTHREADPOOL", "ON")
             env.set("USE_SYSTEM_PSIMD", "ON")
             env.set("USE_SYSTEM_FXDIV", "ON")
