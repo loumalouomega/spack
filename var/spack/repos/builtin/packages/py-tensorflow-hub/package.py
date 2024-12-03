@@ -5,6 +5,7 @@
 
 import tempfile
 
+from spack.build_systems.python import PythonPipBuilder
 from spack.package import *
 
 
@@ -24,7 +25,8 @@ class PyTensorflowHub(Package):
 
     extends("python")
 
-    depends_on("bazel", type="build")
+    # TODO: Directories have changed in Bazel 7, need to update manual install logic
+    depends_on("bazel@:6", type="build")
     depends_on("py-pip", type="build")
     depends_on("py-wheel", type="build")
     depends_on("py-setuptools", type="build")
@@ -77,8 +79,7 @@ class PyTensorflowHub(Package):
         )
 
         with working_dir(insttmp_path):
-            args = std_pip_args + ["--prefix=" + prefix, "."]
-            pip(*args)
+            pip(*PythonPipBuilder.std_args(self), f"--prefix={self.prefix}", ".")
 
         remove_linked_tree(tmp_path)
         remove_linked_tree(insttmp_path)
