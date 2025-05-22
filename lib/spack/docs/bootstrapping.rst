@@ -1,5 +1,4 @@
-.. Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-   Spack Project Developers. See the top-level COPYRIGHT file for details.
+.. Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -15,7 +14,7 @@ is an entire command dedicated to the management of every aspect of bootstrappin
 
 .. command-output:: spack bootstrap --help
 
-Spack is configured to bootstrap its dependencies lazily by default; i.e. the first time they are needed and
+Spack is configured to bootstrap its dependencies lazily by default; i.e., the first time they are needed and
 can't be found. You can readily check if any prerequisite for using Spack is missing by running:
 
 .. code-block:: console
@@ -37,8 +36,8 @@ can't be found. You can readily check if any prerequisite for using Spack is mis
 
 In the case of the output shown above Spack detected that both ``clingo`` and ``gnupg``
 are missing and it's giving detailed information on why they are needed and whether
-they can be bootstrapped. The return code of this command summarizes the results, if any
-dependencies are missing the return code is ``1``, otherwise ``0``. Running a command that
+they can be bootstrapped. The return code of this command summarizes the results; if any
+dependencies are missing, the return code is ``1``, otherwise ``0``. Running a command that
 concretizes a spec, like:
 
 .. code-block:: console
@@ -171,7 +170,7 @@ bootstrapping.
    To register the mirror on the platform where it's supposed to be used run the following command(s):
      % spack bootstrap add --trust local-sources /opt/bootstrap/metadata/sources
      % spack bootstrap add --trust local-binaries /opt/bootstrap/metadata/binaries
-
+     % spack buildcache update-index /opt/bootstrap/bootstrap_cache
 
 This command needs to be run on a machine with internet access and the resulting folder
 has to be moved over to the air-gapped system. Once the local sources are added using the

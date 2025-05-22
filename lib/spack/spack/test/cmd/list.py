@@ -1,22 +1,25 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
-import os.path
+import os
 import sys
 from textwrap import dedent
+
+import pytest
 
 import spack.paths
 import spack.repo
 from spack.main import SpackCommand
+
+pytestmark = [pytest.mark.usefixtures("mock_packages")]
 
 list = SpackCommand("list")
 
 
 def test_list():
     output = list()
-    assert "cloverleaf3d" in output
+    assert "bzip2" in output
     assert "hdf5" in output
 
 
@@ -42,7 +45,7 @@ def test_list_cli_output_format(mock_tty_stdout):
     assert out == out_str
 
 
-def test_list_filter(mock_packages):
+def test_list_filter():
     output = list("py-*")
     assert "py-extension1" in output
     assert "py-extension2" in output
@@ -58,18 +61,18 @@ def test_list_filter(mock_packages):
     assert "mpich" not in output
 
 
-def test_list_search_description(mock_packages):
+def test_list_search_description():
     output = list("--search-description", "one build dependency")
     assert "depb" in output
 
 
-def test_list_format_name_only(mock_packages):
+def test_list_format_name_only():
     output = list("--format", "name_only")
     assert "zmpi" in output
     assert "hdf5" in output
 
 
-def test_list_format_version_json(mock_packages):
+def test_list_format_version_json():
     output = list("--format", "version_json")
     assert '{"name": "zmpi",' in output
     assert '{"name": "dyninst",' in output
@@ -78,7 +81,7 @@ def test_list_format_version_json(mock_packages):
     json.loads(output)
 
 
-def test_list_format_html(mock_packages):
+def test_list_format_html():
     output = list("--format", "html")
     assert '<div class="section" id="zmpi">' in output
     assert "<h1>zmpi" in output
@@ -87,7 +90,7 @@ def test_list_format_html(mock_packages):
     assert "<h1>hdf5" in output
 
 
-def test_list_update(tmpdir, mock_packages):
+def test_list_update(tmpdir):
     update_file = tmpdir.join("output")
 
     # not yet created when list is run
@@ -114,7 +117,7 @@ def test_list_update(tmpdir, mock_packages):
         assert f.read() == "empty\n"
 
 
-def test_list_tags(mock_packages):
+def test_list_tags():
     output = list("--tag", "tag1")
     assert "mpich" in output
     assert "mpich2" in output
@@ -128,7 +131,7 @@ def test_list_tags(mock_packages):
     assert "mpich2" in output
 
 
-def test_list_count(mock_packages):
+def test_list_count():
     output = list("--count")
     assert int(output.strip()) == len(spack.repo.all_package_names())
 
@@ -138,16 +141,15 @@ def test_list_count(mock_packages):
     )
 
 
-# def test_list_repos(mock_packages, builder_test_repository):
 def test_list_repos():
     with spack.repo.use_repositories(
-        os.path.join(spack.paths.repos_path, "builtin.mock"),
-        os.path.join(spack.paths.repos_path, "builder.test"),
+        os.path.join(spack.paths.test_repos_path, "spack_repo", "builtin_mock"),
+        os.path.join(spack.paths.test_repos_path, "spack_repo", "builder_test"),
     ):
         total_pkgs = len(list().strip().split())
-        mock_pkgs = len(list("-r", "builtin.mock").strip().split())
-        builder_pkgs = len(list("-r", "builder.test").strip().split())
-        both_repos = len(list("-r", "builtin.mock", "-r", "builder.test").strip().split())
+        mock_pkgs = len(list("-r", "builtin_mock").strip().split())
+        builder_pkgs = len(list("-r", "builder_test").strip().split())
+        both_repos = len(list("-r", "builtin_mock", "-r", "builder_test").strip().split())
 
         assert total_pkgs > mock_pkgs > builder_pkgs
         assert both_repos == total_pkgs

@@ -1,5 +1,4 @@
-.. Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-   Spack Project Developers. See the top-level COPYRIGHT file for details.
+.. Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -72,9 +71,11 @@ or refer to the full manual below.
 
    configuration
    config_yaml
+   include_yaml
    packages_yaml
    build_settings
    environments
+   env_vars_yaml
    containers
    mirrors
    module_file_support
@@ -102,6 +103,7 @@ or refer to the full manual below.
    :caption: API Docs
 
    Spack API Docs <spack>
+   Spack Builtin Repo <spack_repo>
    LLNL API Docs <llnl>
 
 ==================

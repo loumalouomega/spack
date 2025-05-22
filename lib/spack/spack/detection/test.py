@@ -1,5 +1,4 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """Create and run mock e2e tests for package detection."""
@@ -86,11 +85,11 @@ class Runner:
             self.tmpdir.cleanup()
 
     def _create_executable_scripts(self, mock_executables: MockExecutables) -> List[pathlib.Path]:
-        import jinja2
+        import _vendoring.jinja2
 
         relative_paths = mock_executables.executables
         script = mock_executables.script
-        script_template = jinja2.Template("#!/bin/bash\n{{ script }}\n")
+        script_template = _vendoring.jinja2.Template("#!/bin/bash\n{{ script }}\n")
         result = []
         for mock_exe_path in relative_paths:
             rel_path = pathlib.Path(mock_exe_path)
@@ -198,6 +197,6 @@ def _detection_tests_yaml(
 ) -> Tuple[pathlib.Path, Dict[str, Any]]:
     pkg_dir = pathlib.Path(repository.filename_for_package_name(pkg_name)).parent
     detection_tests_yaml = pkg_dir / "detection_test.yaml"
-    with open(str(detection_tests_yaml)) as f:
+    with open(str(detection_tests_yaml), encoding="utf-8") as f:
         content = spack_yaml.load(f)
     return detection_tests_yaml, content

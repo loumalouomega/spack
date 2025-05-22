@@ -1,5 +1,4 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -7,11 +6,13 @@ import os
 
 import pytest
 
+import spack.binary_distribution as bindist
 import spack.cmd.mirror
+import spack.concretize
 import spack.config
 import spack.environment as ev
 import spack.error
-import spack.mirror
+import spack.mirrors.utils
 import spack.spec
 import spack.util.url as url_util
 import spack.version
@@ -38,8 +39,9 @@ def test_regression_8083(tmpdir, capfd, mock_packages, mock_fetch, config):
     assert "as it is an external spec" in output
 
 
+# Unit tests should not be affected by the user's managed environments
 @pytest.mark.regression("12345")
-def test_mirror_from_env(tmp_path, mock_packages, mock_fetch, mutable_mock_env_path):
+def test_mirror_from_env(mutable_mock_env_path, tmp_path, mock_packages, mock_fetch):
     mirror_dir = str(tmp_path / "mirror")
     env_name = "test"
 
@@ -59,12 +61,32 @@ def test_mirror_from_env(tmp_path, mock_packages, mock_fetch, mutable_mock_env_p
         assert mirror_res == expected
 
 
+# Test for command line-specified spec in concretized environment
+def test_mirror_spec_from_env(mutable_mock_env_path, tmp_path, mock_packages, mock_fetch):
+    mirror_dir = str(tmp_path / "mirror-B")
+    env_name = "test"
+
+    env("create", env_name)
+    with ev.read(env_name):
+        add("simple-standalone-test@0.9")
+        concretize()
+        with spack.config.override("config:checksum", False):
+            mirror("create", "-d", mirror_dir, "simple-standalone-test")
+
+    e = ev.read(env_name)
+    assert set(os.listdir(mirror_dir)) == set([s.name for s in e.user_specs])
+    spec = e.concrete_roots()[0]
+    mirror_res = os.listdir(os.path.join(mirror_dir, spec.name))
+    expected = ["%s.tar.gz" % spec.format("{name}-{version}")]
+    assert mirror_res == expected
+
+
 @pytest.fixture
 def source_for_pkg_with_hash(mock_packages, tmpdir):
-    s = spack.spec.Spec("trivial-pkg-with-valid-hash").concretized()
+    s = spack.concretize.concretize_one("trivial-pkg-with-valid-hash")
     local_url_basename = os.path.basename(s.package.url)
     local_path = os.path.join(str(tmpdir), local_url_basename)
-    with open(local_path, "w") as f:
+    with open(local_path, "w", encoding="utf-8") as f:
         f.write(s.package.hashed_content)
     local_url = url_util.path_to_file_url(local_path)
     s.package.versions[spack.version.Version("1.0")]["url"] = local_url
@@ -73,8 +95,10 @@ def source_for_pkg_with_hash(mock_packages, tmpdir):
 def test_mirror_skip_unstable(tmpdir_factory, mock_packages, config, source_for_pkg_with_hash):
     mirror_dir = str(tmpdir_factory.mktemp("mirror-dir"))
 
-    specs = [spack.spec.Spec(x).concretized() for x in ["git-test", "trivial-pkg-with-valid-hash"]]
-    spack.mirror.create(mirror_dir, specs, skip_unstable_versions=True)
+    specs = [
+        spack.concretize.concretize_one(x) for x in ["git-test", "trivial-pkg-with-valid-hash"]
+    ]
+    spack.mirrors.utils.create(mirror_dir, specs, skip_unstable_versions=True)
 
     assert set(os.listdir(mirror_dir)) - set(["_source-cache"]) == set(
         ["trivial-pkg-with-valid-hash"]
@@ -112,7 +136,7 @@ def test_exclude_specs(mock_packages, config):
 
     mirror_specs, _ = spack.cmd.mirror._specs_and_action(args)
     expected_include = set(
-        spack.spec.Spec(x).concretized() for x in ["mpich@3.0.3", "mpich@3.0.4", "mpich@3.0"]
+        spack.concretize.concretize_one(x) for x in ["mpich@3.0.3", "mpich@3.0.4", "mpich@3.0"]
     )
     expected_exclude = set(spack.spec.Spec(x) for x in ["mpich@3.0.1", "mpich@3.0.2", "mpich@1.0"])
     assert expected_include <= set(mirror_specs)
@@ -134,7 +158,7 @@ def test_exclude_specs_public_mirror(mock_packages, config):
 
 def test_exclude_file(mock_packages, tmpdir, config):
     exclude_path = os.path.join(str(tmpdir), "test-exclude.txt")
-    with open(exclude_path, "w") as exclude_file:
+    with open(exclude_path, "w", encoding="utf-8") as exclude_file:
         exclude_file.write(
             """\
 mpich@3.0.1:3.0.2
@@ -146,7 +170,7 @@ mpich@1.0
 
     mirror_specs, _ = spack.cmd.mirror._specs_and_action(args)
     expected_include = set(
-        spack.spec.Spec(x).concretized() for x in ["mpich@3.0.3", "mpich@3.0.4", "mpich@3.0"]
+        spack.concretize.concretize_one(x) for x in ["mpich@3.0.3", "mpich@3.0.4", "mpich@3.0"]
     )
     expected_exclude = set(spack.spec.Spec(x) for x in ["mpich@3.0.1", "mpich@3.0.2", "mpich@1.0"])
     assert expected_include <= set(mirror_specs)
@@ -340,8 +364,16 @@ def test_mirror_name_collision(mutable_config):
         mirror("add", "first", "1")
 
 
+# Unit tests should not be affected by the user's managed environments
 def test_mirror_destroy(
-    install_mockery, mock_packages, mock_fetch, mock_archive, mutable_config, monkeypatch, tmpdir
+    mutable_mock_env_path,
+    install_mockery,
+    mock_packages,
+    mock_fetch,
+    mock_archive,
+    mutable_config,
+    monkeypatch,
+    tmpdir,
 ):
     # Create a temp mirror directory for buildcache usage
     mirror_dir = tmpdir.join("mirror_dir")
@@ -351,11 +383,13 @@ def test_mirror_destroy(
     spec_name = "libdwarf"
 
     # Put a binary package in a buildcache
-    install("--no-cache", spec_name)
+    install("--fake", "--no-cache", spec_name)
     buildcache("push", "-u", "-f", mirror_dir.strpath, spec_name)
 
+    blobs_path = bindist.buildcache_relative_blobs_path()
+
     contents = os.listdir(mirror_dir.strpath)
-    assert "build_cache" in contents
+    assert blobs_path in contents
 
     # Destroy mirror by name
     mirror("destroy", "-m", "atest")
@@ -365,7 +399,7 @@ def test_mirror_destroy(
     buildcache("push", "-u", "-f", mirror_dir.strpath, spec_name)
 
     contents = os.listdir(mirror_dir.strpath)
-    assert "build_cache" in contents
+    assert blobs_path in contents
 
     # Destroy mirror by url
     mirror("destroy", "--mirror-url", mirror_url)
@@ -387,8 +421,7 @@ class TestMirrorCreate:
     @pytest.mark.parametrize(
         "cli_args,error_str",
         [
-            # Passed more than one among -f --all and specs
-            ({"specs": "hdf5", "file": None, "all": True}, "cannot specify specs on command line"),
+            # Passed more than one among -f --all
             (
                 {"specs": None, "file": "input.txt", "all": True},
                 "cannot specify specs with a file if",

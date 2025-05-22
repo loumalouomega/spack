@@ -1,5 +1,4 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -40,10 +39,12 @@ abd = {"mockpkg-a", "mockpkg-b", "mockpkg-d"}
 def mock_pkg_git_repo(git, tmp_path_factory):
     """Copy the builtin.mock repo and make a mutable git repo inside it."""
     root_dir = tmp_path_factory.mktemp("mock_pkg_git_repo")
-    repo_dir = root_dir / "builtin.mock"
+    # create spack_repo subdir
+    (root_dir / "spack_repo").mkdir()
+    repo_dir = root_dir / "spack_repo" / "builtin_mock"
     shutil.copytree(spack.paths.mock_packages_path, str(repo_dir))
 
-    repo_cache = spack.util.file_cache.FileCache(str(root_dir / "cache"))
+    repo_cache = spack.util.file_cache.FileCache(root_dir / "cache")
     mock_repo = spack.repo.RepoPath(str(repo_dir), cache=repo_cache)
     mock_repo_packages = mock_repo.repos[0].packages_path
 
@@ -58,25 +59,25 @@ def mock_pkg_git_repo(git, tmp_path_factory):
         git("-c", "commit.gpgsign=false", "commit", "-m", "initial mock repo commit")
 
         # add commit with mockpkg-a, mockpkg-b, mockpkg-c packages
-        mkdirp("mockpkg-a", "mockpkg-b", "mockpkg-c")
-        with open("mockpkg-a/package.py", "w") as f:
+        mkdirp("mockpkg_a", "mockpkg_b", "mockpkg_c")
+        with open("mockpkg_a/package.py", "w", encoding="utf-8") as f:
             f.write(pkg_template.format(name="PkgA"))
-        with open("mockpkg-b/package.py", "w") as f:
+        with open("mockpkg_b/package.py", "w", encoding="utf-8") as f:
             f.write(pkg_template.format(name="PkgB"))
-        with open("mockpkg-c/package.py", "w") as f:
+        with open("mockpkg_c/package.py", "w", encoding="utf-8") as f:
             f.write(pkg_template.format(name="PkgC"))
-        git("add", "mockpkg-a", "mockpkg-b", "mockpkg-c")
+        git("add", "mockpkg_a", "mockpkg_b", "mockpkg_c")
         git("-c", "commit.gpgsign=false", "commit", "-m", "add mockpkg-a, mockpkg-b, mockpkg-c")
 
         # remove mockpkg-c, add mockpkg-d
-        with open("mockpkg-b/package.py", "a") as f:
+        with open("mockpkg_b/package.py", "a", encoding="utf-8") as f:
             f.write("\n# change mockpkg-b")
-        git("add", "mockpkg-b")
-        mkdirp("mockpkg-d")
-        with open("mockpkg-d/package.py", "w") as f:
+        git("add", "mockpkg_b")
+        mkdirp("mockpkg_d")
+        with open("mockpkg_d/package.py", "w", encoding="utf-8") as f:
             f.write(pkg_template.format(name="PkgD"))
-        git("add", "mockpkg-d")
-        git("rm", "-rf", "mockpkg-c")
+        git("add", "mockpkg_d")
+        git("rm", "-rf", "mockpkg_c")
         git(
             "-c",
             "commit.gpgsign=false",
@@ -91,7 +92,7 @@ def mock_pkg_git_repo(git, tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def mock_pkg_names():
-    repo = spack.repo.PATH.get_repo("builtin.mock")
+    repo = spack.repo.PATH.get_repo("builtin_mock")
 
     # Be sure to include virtual packages since packages with stand-alone
     # tests may inherit additional tests from the virtuals they provide,
@@ -112,27 +113,28 @@ def split(output):
 pkg = spack.main.SpackCommand("pkg")
 
 
-def test_packages_path():
-    assert spack.repo.packages_path() == spack.repo.PATH.get_repo("builtin").packages_path
+@pytest.mark.requires_builtin("builtin repository path must exist")
+def test_builtin_repo():
+    assert spack.repo.builtin_repo() is spack.repo.PATH.get_repo("builtin")
 
 
-def test_mock_packages_path(mock_packages):
-    assert spack.repo.packages_path() == spack.repo.PATH.get_repo("builtin.mock").packages_path
+def test_mock_builtin_repo(mock_packages):
+    assert spack.repo.builtin_repo() is spack.repo.PATH.get_repo("builtin_mock")
 
 
 def test_pkg_add(git, mock_pkg_git_repo):
     with working_dir(mock_pkg_git_repo):
-        mkdirp("mockpkg-e")
-        with open("mockpkg-e/package.py", "w") as f:
+        mkdirp("mockpkg_e")
+        with open("mockpkg_e/package.py", "w", encoding="utf-8") as f:
             f.write(pkg_template.format(name="PkgE"))
 
     pkg("add", "mockpkg-e")
 
     with working_dir(mock_pkg_git_repo):
         try:
-            assert "A  mockpkg-e/package.py" in git("status", "--short", output=str)
+            assert "A  mockpkg_e/package.py" in git("status", "--short", output=str)
         finally:
-            shutil.rmtree("mockpkg-e")
+            shutil.rmtree("mockpkg_e")
             # Removing a package mid-run disrupts Spack's caching
             if spack.repo.PATH.repos[0]._fast_package_checker:
                 spack.repo.PATH.repos[0]._fast_package_checker.invalidate()
@@ -257,7 +259,7 @@ def test_pkg_source(mock_packages):
     fake_source = pkg("source", "fake")
 
     fake_file = spack.repo.PATH.filename_for_package_name("fake")
-    with open(fake_file) as f:
+    with open(fake_file, encoding="utf-8") as f:
         contents = f.read()
         assert fake_source == contents
 

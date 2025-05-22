@@ -1,5 +1,4 @@
-.. Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-   Spack Project Developers. See the top-level COPYRIGHT file for details.
+.. Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -12,7 +11,7 @@ Container Images
 Spack :ref:`environments` can easily be turned into container images. This page
 outlines two ways in which this can be done:
 
-1. By installing the environment on the host system, and copying the installations
+1. By installing the environment on the host system and copying the installations
    into the container image. This approach does not require any tools like Docker
    or Singularity to be installed.
 2. By generating a Docker or Singularity recipe that can be used to build the
@@ -38,9 +37,11 @@ just have to configure and OCI registry and run ``spack buildcache push``.
    spack -e . install
 
    # Configure the registry
-   spack -e . mirror add --oci-username ... --oci-password ... container-registry oci://example.com/name/image
+   spack -e . mirror add --oci-username-variable REGISTRY_USER \
+                         --oci-password-variable REGISTRY_TOKEN \
+                        container-registry oci://example.com/name/image
 
-   # Push the image
+   # Push the image (do set REGISTRY_USER and REGISTRY_TOKEN)
    spack -e . buildcache push --update-index --base-image ubuntu:22.04 --tag my_env container-registry
 
 The resulting container image can then be run as follows:
@@ -55,8 +56,8 @@ environment roots and its runtime dependencies.
 
 .. note::
 
-  When using registries like GHCR and Docker Hub, the ``--oci-password`` flag is not
-  the password for your account, but a personal access token you need to generate separately.
+  When using registries like GHCR and Docker Hub, the ``--oci-password`` flag specifies not
+  the password for your account, but rather a personal access token you need to generate separately.
 
 The specified ``--base-image`` should have a libc that is compatible with the host system.
 For example if your host system is Ubuntu 20.04, you can use ``ubuntu:20.04``, ``ubuntu:22.04``

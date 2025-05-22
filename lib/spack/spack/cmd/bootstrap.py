@@ -1,8 +1,8 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
-import os.path
+import os
+import pathlib
 import shutil
 import sys
 import tempfile
@@ -15,9 +15,9 @@ import spack
 import spack.bootstrap
 import spack.bootstrap.config
 import spack.bootstrap.core
+import spack.concretize
 import spack.config
-import spack.mirror
-import spack.spec
+import spack.mirrors.utils
 import spack.stage
 import spack.util.path
 import spack.util.spack_yaml
@@ -29,7 +29,7 @@ level = "long"
 
 
 # Tarball to be downloaded if binary packages are requested in a local mirror
-BINARY_TARBALL = "https://github.com/spack/spack-bootstrap-mirrors/releases/download/v0.4/bootstrap-buildcache.tar.gz"
+BINARY_TARBALL = "https://github.com/spack/spack-bootstrap-mirrors/releases/download/v0.6/bootstrap-buildcache-v3.tar.gz"
 
 #: Subdirectory where to create the mirror
 LOCAL_MIRROR_DIR = "bootstrap_cache"
@@ -51,9 +51,9 @@ BINARY_METADATA = {
     },
 }
 
-CLINGO_JSON = "$spack/share/spack/bootstrap/github-actions-v0.4/clingo.json"
-GNUPG_JSON = "$spack/share/spack/bootstrap/github-actions-v0.4/gnupg.json"
-PATCHELF_JSON = "$spack/share/spack/bootstrap/github-actions-v0.4/patchelf.json"
+CLINGO_JSON = "$spack/share/spack/bootstrap/github-actions-v0.6/clingo.json"
+GNUPG_JSON = "$spack/share/spack/bootstrap/github-actions-v0.6/gnupg.json"
+PATCHELF_JSON = "$spack/share/spack/bootstrap/github-actions-v0.6/patchelf.json"
 
 # Metadata for a generated source mirror
 SOURCE_METADATA = {
@@ -398,9 +398,9 @@ def _mirror(args):
         llnl.util.tty.msg(msg.format(spec_str, mirror_dir))
         # Suppress tty from the call below for terser messages
         llnl.util.tty.set_msg_enabled(False)
-        spec = spack.spec.Spec(spec_str).concretized()
+        spec = spack.concretize.concretize_one(spec_str)
         for node in spec.traverse():
-            spack.mirror.create(mirror_dir, [node])
+            spack.mirrors.utils.create(mirror_dir, [node])
         llnl.util.tty.set_msg_enabled(True)
 
     if args.binary_packages:
@@ -411,15 +411,16 @@ def _mirror(args):
         stage.create()
         stage.fetch()
         stage.expand_archive()
-        build_cache_dir = os.path.join(stage.source_path, "build_cache")
-        shutil.move(build_cache_dir, mirror_dir)
+        stage_dir = pathlib.Path(stage.source_path)
+        for entry in stage_dir.iterdir():
+            shutil.move(str(entry), mirror_dir)
         llnl.util.tty.set_msg_enabled(True)
 
     def write_metadata(subdir, metadata):
         metadata_rel_dir = os.path.join("metadata", subdir)
         metadata_yaml = os.path.join(args.root_dir, metadata_rel_dir, "metadata.yaml")
         llnl.util.filesystem.mkdirp(os.path.dirname(metadata_yaml))
-        with open(metadata_yaml, mode="w") as f:
+        with open(metadata_yaml, mode="w", encoding="utf-8") as f:
             spack.util.spack_yaml.dump(metadata, stream=f)
         return os.path.dirname(metadata_yaml), metadata_rel_dir
 

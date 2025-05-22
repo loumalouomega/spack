@@ -1,5 +1,4 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import platform as py_platform
@@ -39,7 +38,7 @@ class LinuxDistro(OperatingSystem):
     def __init__(self):
         try:
             # This will throw an error if imported on a non-Linux platform.
-            import distro
+            from _vendoring import distro
 
             distname, version = distro.id(), distro.version()
         except ImportError:

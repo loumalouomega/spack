@@ -1,5 +1,4 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -53,6 +52,12 @@ def setup_parser(subparser):
     )
 
     subparser.add_argument(
+        "--specfile-format",
+        action="store_true",
+        help="show the specfile format for installed deps ",
+    )
+
+    subparser.add_argument(
         "-d", "--deps", action="store_true", help="output dependencies along with found specs"
     )
 
@@ -99,7 +104,7 @@ def setup_parser(subparser):
         "--show-full-compiler",
         action="store_true",
         dest="show_full_compiler",
-        help="show full compiler specs",
+        help="(DEPRECATED) show full compiler specs. Currently it's a no-op",
     )
     implicit_explicit = subparser.add_mutually_exclusive_group()
     implicit_explicit.add_argument(
@@ -279,9 +284,9 @@ def display_env(env, args, decorator, results):
             # these enforce details in the root specs to show what the user asked for
             namespaces=True,
             show_flags=True,
-            show_full_compiler=True,
             decorator=root_decorator,
             variants=True,
+            specfile_format=args.specfile_format,
         )
 
     print()
@@ -302,8 +307,8 @@ def display_env(env, args, decorator, results):
             decorator=lambda s, f: color.colorize("@*{%s}" % f),
             namespace=True,
             show_flags=True,
-            show_full_compiler=True,
             variants=True,
+            specfile_format=args.specfile_format,
         )
         print()
 
@@ -393,7 +398,12 @@ def find(parser, args):
             if args.show_concretized:
                 display_results += concretized_but_not_installed
             cmd.display_specs(
-                display_results, args, decorator=decorator, all_headers=True, status_fn=status_fn
+                display_results,
+                args,
+                decorator=decorator,
+                all_headers=True,
+                status_fn=status_fn,
+                specfile_format=args.specfile_format,
             )
 
         # print number of installed packages last (as the list may be long)

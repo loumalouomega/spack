@@ -1,5 +1,4 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import os
@@ -11,10 +10,8 @@ def get_spack_sys_paths(spack_prefix):
     """Given a spack prefix, return all the paths Spack needs to function."""
     spack_libs = os.path.join(spack_prefix, "lib", "spack")
     external_libs = os.path.join(spack_libs, "external")
-    vendored_libs = os.path.join(external_libs, "_vendoring")
-
-    # spack externals take precedence, then vendored packages, then spack itself
-    return [external_libs, vendored_libs, spack_libs]
+    # spack externals take precedence, then spack itself
+    return [external_libs, spack_libs]
 
 
 def main(argv=None):

@@ -1,5 +1,4 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# Copyright Spack Project Developers. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """This module encapsulates package installation functionality.
@@ -56,7 +55,7 @@ import spack.database
 import spack.deptypes as dt
 import spack.error
 import spack.hooks
-import spack.mirror
+import spack.mirrors.mirror
 import spack.package_base
 import spack.package_prefs as prefs
 import spack.repo
@@ -66,6 +65,7 @@ import spack.store
 import spack.util.executable
 import spack.util.path
 import spack.util.timer as timer
+from spack.url_buildcache import BuildcacheEntryError
 from spack.util.environment import EnvironmentModifications, dump_environment
 from spack.util.executable import which
 
@@ -105,7 +105,7 @@ class BuildStatus(enum.Enum):
 def _write_timer_json(pkg, timer, cache):
     extra_attributes = {"name": pkg.name, "cache": cache, "hash": pkg.spec.dag_hash()}
     try:
-        with open(pkg.times_log_path, "w") as timelog:
+        with open(pkg.times_log_path, "w", encoding="utf-8") as timelog:
             timer.write_json(timelog, extra_attributes=extra_attributes)
     except Exception as e:
         tty.debug(str(e))
@@ -276,7 +276,7 @@ def _do_fake_install(pkg: "spack.package_base.PackageBase") -> None:
     fs.mkdirp(pkg.prefix.bin)
     fs.touch(os.path.join(pkg.prefix.bin, command))
     if sys.platform != "win32":
-        chmod = which("chmod")
+        chmod = which("chmod", required=True)
         chmod("+x", os.path.join(pkg.prefix.bin, command))
 
     # Install fake header file
@@ -450,17 +450,17 @@ def _process_binary_cache_tarball(
             else ``False``
     """
     with timer.measure("fetch"):
-        download_result = binary_distribution.download_tarball(
+        tarball_stage = binary_distribution.download_tarball(
             pkg.spec.build_spec, unsigned, mirrors_for_spec
         )
 
-        if download_result is None:
+        if tarball_stage is None:
             return False
 
     tty.msg(f"Extracting {package_id(pkg.spec)} from binary cache")
 
     with timer.measure("install"), spack.util.path.filter_padding():
-        binary_distribution.extract_tarball(pkg.spec, download_result, force=False, timer=timer)
+        binary_distribution.extract_tarball(pkg.spec, tarball_stage, force=False, timer=timer)
 
         if pkg.spec.spliced:  # overwrite old metadata with new
             spack.store.STORE.layout.write_spec(
@@ -491,7 +491,7 @@ def _try_install_from_binary_cache(
         timer: timer to keep track of binary install phases.
     """
     # Early exit if no binary mirrors are configured.
-    if not spack.mirror.MirrorCollection(binary=True):
+    if not spack.mirrors.mirror.MirrorCollection(binary=True):
         return False
 
     tty.debug(f"Searching for binary cache of {package_id(pkg.spec)}")
@@ -540,7 +540,7 @@ def dump_packages(spec: "spack.spec.Spec", path: str) -> None:
     # Note that we copy them in as they are in the *install* directory
     # NOT as they are in the repository, because we want a snapshot of
     # how *this* particular build was done.
-    for node in spec.traverse(deptype=all):
+    for node in spec.traverse(deptype="all"):
         if node is not spec:
             # Locate the dependency package in the install tree and find
             # its provenance information.
@@ -567,10 +567,11 @@ def dump_packages(spec: "spack.spec.Spec", path: str) -> None:
                 tty.warn(f"Warning: Couldn't copy in provenance for {node.name}")
 
         # Create a destination repository
-        dest_repo_root = os.path.join(path, node.namespace)
-        if not os.path.exists(dest_repo_root):
-            spack.repo.create_repo(dest_repo_root)
-        repo = spack.repo.from_path(dest_repo_root)
+        pkg_api = spack.repo.PATH.get_repo(node.namespace).package_api
+        repo_root = os.path.join(path, node.namespace) if pkg_api < (2, 0) else path
+        repo = spack.repo.create_or_construct(
+            repo_root, namespace=node.namespace, package_api=pkg_api
+        )
 
         # Get the location of the package in the dest repo.
         dest_pkg_dir = repo.dirname_for_package_name(node.name)
@@ -692,7 +693,7 @@ def log(pkg: "spack.package_base.PackageBase") -> None:
         if errors.getvalue():
             error_file = os.path.join(target_dir, "errors.txt")
             fs.mkdirp(target_dir)
-            with open(error_file, "w") as err:
+            with open(error_file, "w", encoding="utf-8") as err:
                 err.write(errors.getvalue())
             tty.warn(f"Errors occurred when archiving files.\n\tSee: {error_file}")
 
@@ -815,7 +816,7 @@ class BuildRequest:
         # Include build dependencies if pkg is going to be built from sources, or
         # if build deps are explicitly requested.
         if include_build_deps or not (
-            cache_only or pkg.spec.installed and not pkg.spec.dag_hash() in self.overwrite
+            cache_only or pkg.spec.installed and pkg.spec.dag_hash() not in self.overwrite
         ):
             depflag |= dt.BUILD
         if self.run_tests(pkg):
@@ -2177,7 +2178,7 @@ class PackageInstaller:
                 )
                 raise
 
-            except binary_distribution.NoChecksumException as exc:
+            except BuildcacheEntryError as exc:
                 if task.cache_only:
                     raise
 
@@ -2405,7 +2406,7 @@ class BuildProcessInstaller:
 
             # Save just the changes to the environment.  This file can be
             # safely installed, since it does not contain secret variables.
-            with open(pkg.env_mods_path, "w") as env_mods_file:
+            with open(pkg.env_mods_path, "w", encoding="utf-8") as env_mods_file:
                 mods = self.env_mods.shell_modifications(explicit=True, env=self.unmodified_env)
                 env_mods_file.write(mods)
 
@@ -2414,7 +2415,7 @@ class BuildProcessInstaller:
                     configure_args = getattr(pkg, attr)()
                     configure_args = " ".join(configure_args)
 
-                    with open(pkg.configure_args_path, "w") as args_file:
+                    with open(pkg.configure_args_path, "w", encoding="utf-8") as args_file:
                         args_file.write(configure_args)
 
                     break
@@ -2437,11 +2438,7 @@ class BuildProcessInstaller:
                     # DEBUGGING TIP - to debug this section, insert an IPython
                     # embed here, and run the sections below without log capture
                     log_contextmanager = log_output(
-                        log_file,
-                        self.echo,
-                        True,
-                        env=self.unmodified_env,
-                        filter_fn=self.filter_fn,
+                        log_file, self.echo, True, filter_fn=self.filter_fn
                     )
 
                     with log_contextmanager as logger:

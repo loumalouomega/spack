@@ -1,5 +1,4 @@
-.. Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-   Spack Project Developers. See the top-level COPYRIGHT file for details.
+.. Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -215,7 +214,7 @@ package versions, simply run the following commands:
 
 Running ``spack mark -i --all`` tells Spack to mark all of the existing
 packages within an environment as "implicitly" installed. This tells
-spack's garbage collection system that these packages should be cleaned up.
+Spack's garbage collection system that these packages should be cleaned up.
 
 Don't worry however, this will not remove your entire environment.
 Running ``spack install`` will reexamine your spack environment after

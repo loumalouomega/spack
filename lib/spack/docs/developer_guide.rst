@@ -1,5 +1,4 @@
-.. Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-   Spack Project Developers. See the top-level COPYRIGHT file for details.
+.. Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -155,9 +154,7 @@ Package-related modules
 
 :mod:`spack.util.naming`
   Contains functions for mapping between Spack package names,
-  Python module names, and Python class names. Functions like
-  :func:`~spack.util.naming.mod_to_class` handle mapping package
-  module names to class names.
+  Python module names, and Python class names.
 
 :mod:`spack.directives`
   *Directives* are functions that can be called inside a package definition
@@ -178,8 +175,8 @@ Spec-related modules
   Contains :class:`~spack.spec.Spec`. Also implements most of the logic for concretization
   of specs.
 
-:mod:`spack.parser`
-  Contains :class:`~spack.parser.SpecParser` and functions related to parsing specs.
+:mod:`spack.spec_parser`
+  Contains :class:`~spack.spec_parser.SpecParser` and functions related to parsing specs.
 
 :mod:`spack.version`
   Implements a simple :class:`~spack.version.Version` class with simple
@@ -544,10 +541,10 @@ With either interpreter you can run a single command:
 
 .. code-block:: console
 
-   $ spack python -c 'from spack.spec import Spec; Spec("python").concretized()'
+   $ spack python -c 'from spack.concretize import concretize_one; concretize_one("python")'
    ...
 
-   $ spack python -i ipython -c 'from spack.spec import Spec; Spec("python").concretized()'
+   $ spack python -i ipython -c 'from spack.concretize import concretize_one; concretize_one("python")'
    Out[1]: ...
 
 or a file:

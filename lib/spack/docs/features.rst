@@ -1,5 +1,4 @@
-.. Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-   Spack Project Developers. See the top-level COPYRIGHT file for details.
+.. Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -132,7 +131,7 @@ creates a simple python file:
 It doesn't take much python coding to get from there to a working
 package:
 
-.. literalinclude:: _spack_root/var/spack/repos/builtin/packages/libelf/package.py
+.. literalinclude:: _spack_root/var/spack/repos/spack_repo/builtin/packages/libelf/package.py
    :lines: 5-
 
 Spack also provides wrapper functions around common commands like

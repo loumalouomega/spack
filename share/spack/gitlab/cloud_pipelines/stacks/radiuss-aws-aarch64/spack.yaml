@@ -2,15 +2,16 @@ spack:
   view: false
   packages:
     all:
-      providers:
-        blas:
-          - openblas
-        mkl:
-          - intel-oneapi-mkl
-        mpi:
-          - openmpi
-          - mpich
-      variants: +mpi
+      target: ["target=aarch64"]
+      require:
+      - "target=aarch64"
+      - "+mpi"
+    blas:
+      require:
+      - openblas
+    mpi:
+      require:
+      - openmpi
 
   definitions:
   - radiuss:
@@ -29,7 +30,6 @@ spack:
 
   - target:
     - 'target=aarch64'
-    - 'target=neoverse_n1'
 
   specs:
 
