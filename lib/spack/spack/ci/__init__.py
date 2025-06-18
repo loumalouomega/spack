@@ -268,7 +268,7 @@ def create_external_pruner() -> Callable[[spack.spec.Spec], RebuildDecision]:
 
 def _format_pruning_message(spec: spack.spec.Spec, prune: bool, reasons: List[str]) -> str:
     reason_msg = ", ".join(reasons)
-    spec_fmt = "{name}{@version}{/hash:7}{%compiler}"
+    spec_fmt = "{name}{@version}{/hash:7}{compilers}"
 
     if not prune:
         status = colorize("@*g{[x]}  ")
@@ -520,9 +520,7 @@ def generate_pipeline(env: ev.Environment, args) -> None:
     # Use all unpruned specs to populate the build group for this set
     cdash_config = cfg.get("cdash")
     if options.cdash_handler and options.cdash_handler.auth_token:
-        options.cdash_handler.populate_buildgroup(
-            [options.cdash_handler.build_name(s) for s in pipeline_specs]
-        )
+        options.cdash_handler.create_buildgroup()
     elif cdash_config:
         # warn only if there was actually a CDash configuration.
         tty.warn("Unable to populate buildgroup without CDash credentials")

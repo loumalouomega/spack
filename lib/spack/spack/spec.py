@@ -2160,9 +2160,13 @@ class Spec:
         """
         include = include or (lambda dep: True)
         parts = []
-        direct, transitive = lang.stable_partition(
-            self.edges_to_dependencies(), predicate_fn=lambda x: x.direct
-        )
+        if self.concrete:
+            direct = self.edges_to_dependencies()
+            transitive: List[DependencySpec] = []
+        else:
+            direct, transitive = lang.stable_partition(
+                self.edges_to_dependencies(), predicate_fn=lambda x: x.direct
+            )
 
         # helper for direct and transitive loops below
         def format_edge(edge, sigil, dep_spec=None):
@@ -2194,6 +2198,11 @@ class Spec:
                 parts.append(format_edge(edge, "%", edge.spec))
             finally:
                 edge.spec.name = old_name
+
+        if self.concrete:
+            # Concrete specs should go no further, as the complexity
+            # below is O(paths)
+            return " ".join(parts).strip()
 
         # transitive dependencies (with any direct dependencies)
         for edge in sorted(transitive, key=lambda x: x.spec.name):
@@ -2228,6 +2237,8 @@ class Spec:
     @property
     def long_spec(self):
         """Returns a string of the spec with the dependencies completely enumerated."""
+        if self.concrete:
+            return self.tree(format=DISPLAY_FORMAT)
         return f"{self.format()} {self._format_dependencies()}".strip()
 
     @property
