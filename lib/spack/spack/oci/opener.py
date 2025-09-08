@@ -17,9 +17,8 @@ from http.client import HTTPResponse
 from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Tuple
 from urllib.request import Request
 
-import llnl.util.lang
-
 import spack.config
+import spack.llnl.util.lang
 import spack.mirrors.mirror
 import spack.tokenize
 import spack.util.web
@@ -41,7 +40,7 @@ OpenType = Callable[..., HTTPResponse]
 MaybeOpen = Optional[OpenType]
 
 #: Opener that automatically uses OCI authentication based on mirror config
-urlopen: OpenType = llnl.util.lang.Singleton(_urlopen)
+urlopen: OpenType = spack.llnl.util.lang.Singleton(_urlopen)
 
 
 SP = r" "
@@ -368,10 +367,8 @@ def credentials_from_mirrors(
                 continue
 
             url = mirror.get_url(direction)
-            if not url.startswith("oci://"):
-                continue
             try:
-                parsed = ImageReference.from_string(url[6:])
+                parsed = ImageReference.from_url(url)
             except ValueError:
                 continue
             if parsed.domain == domain:
@@ -385,7 +382,8 @@ def create_opener():
     for handler in [
         urllib.request.ProxyHandler(),
         urllib.request.UnknownHandler(),
-        urllib.request.HTTPSHandler(context=spack.util.web.ssl_create_default_context()),
+        urllib.request.HTTPHandler(),
+        spack.util.web.SpackHTTPSHandler(context=spack.util.web.ssl_create_default_context()),
         spack.util.web.SpackHTTPDefaultErrorHandler(),
         urllib.request.HTTPRedirectHandler(),
         urllib.request.HTTPErrorProcessor(),

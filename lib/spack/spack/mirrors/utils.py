@@ -4,17 +4,16 @@
 import os
 import traceback
 
-import llnl.util.tty as tty
-from llnl.util.filesystem import mkdirp
-
 import spack.caches
 import spack.config
 import spack.error
+import spack.llnl.util.tty as tty
 import spack.repo
 import spack.spec
 import spack.util.spack_yaml as syaml
 import spack.version
 from spack.error import MirrorError
+from spack.llnl.util.filesystem import mkdirp
 from spack.mirrors.mirror import Mirror, MirrorCollection
 
 
@@ -102,12 +101,12 @@ def create(path, specs, skip_unstable_versions=False):
             they do not have a stable archive checksum (as determined by
             ``fetch_strategy.stable_target``)
 
-    Return Value:
-        Returns a tuple of lists: (present, mirrored, error)
+    Returns:
+        A tuple of lists, each containing specs
 
-        * present:  Package specs that were already present.
+        * present: Package specs that were already present.
         * mirrored: Package specs that were successfully mirrored.
-        * error:    Package specs that failed to mirror due to some error.
+        * error: Package specs that failed to mirror due to some error.
     """
     # automatically spec-ify anything in the specs array.
     specs = [s if isinstance(s, spack.spec.Spec) else spack.spec.Spec(s) for s in specs]

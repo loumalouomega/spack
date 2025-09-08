@@ -8,8 +8,6 @@ import os
 import sys
 from typing import Any, Dict, Generator, MutableSequence, Sequence
 
-from llnl.util import tty
-
 import spack.compilers.config
 import spack.config
 import spack.environment
@@ -20,6 +18,7 @@ import spack.repo
 import spack.spec
 import spack.store
 import spack.util.path
+from spack.llnl.util import tty
 
 #: Reference counter for the bootstrapping configuration context manager
 _REF_COUNT = 0
@@ -35,8 +34,9 @@ def spec_for_current_python() -> str:
     minor version (all patches are ABI compatible with the same minor).
 
     See:
-      https://www.python.org/dev/peps/pep-0513/
-      https://stackoverflow.com/a/35801395/771663
+
+    * https://www.python.org/dev/peps/pep-0513/
+    * https://stackoverflow.com/a/35801395/771663
     """
     version_str = ".".join(str(x) for x in sys.version_info[:2])
     return f"python@{version_str}"
