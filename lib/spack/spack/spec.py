@@ -2177,7 +2177,9 @@ class Spec:
             return out[:-7] + self.build_spec.spec_hash(hash)[-7:]
         return out
 
-    def _cached_hash(self, hash, length=None, force=False):
+    def _cached_hash(
+        self, hash: ht.SpecHashDescriptor, length: Optional[int] = None, force: bool = False
+    ) -> str:
         """Helper function for storing a cached hash on the spec.
 
         This will run spec_hash() with the deptype and package_hash
@@ -2185,22 +2187,19 @@ class Spec:
         in the supplied attribute on this spec.
 
         Arguments:
-            hash (spack.hash_types.SpecHashDescriptor): type of hash to generate.
-            length (int): length of hash prefix to return (default is full hash string)
-            force (bool): cache the hash even if spec is not concrete (default False)
+            hash: type of hash to generate.
+            length: length of hash prefix to return (default is full hash string)
+            force: cache the hash even if spec is not concrete (default False)
         """
-        if not hash.attr:
-            return self.spec_hash(hash)[:length]
-
         hash_string = getattr(self, hash.attr, None)
         if hash_string:
             return hash_string[:length]
-        else:
-            hash_string = self.spec_hash(hash)
-            if force or self.concrete:
-                setattr(self, hash.attr, hash_string)
 
-            return hash_string[:length]
+        hash_string = self.spec_hash(hash)
+        if force or self.concrete:
+            setattr(self, hash.attr, hash_string)
+
+        return hash_string[:length]
 
     def package_hash(self):
         """Compute the hash of the contents of the package for this node"""
@@ -2293,9 +2292,7 @@ class Spec:
 
         self._dup(self.lookup_hash())
 
-    def to_node_dict(
-        self, hash: ht.SpecHashDescriptor = ht.dag_hash  # type: ignore[has-type]
-    ) -> Dict[str, Any]:
+    def to_node_dict(self, hash: ht.SpecHashDescriptor = ht.dag_hash) -> Dict[str, Any]:
         """Create a dictionary representing the state of this Spec.
 
         This method creates the content that is eventually hashed by Spack to create identifiers
@@ -2452,9 +2449,7 @@ class Spec:
 
         return d
 
-    def to_dict(
-        self, hash: ht.SpecHashDescriptor = ht.dag_hash  # type: ignore[has-type]
-    ) -> Dict[str, Any]:
+    def to_dict(self, hash: ht.SpecHashDescriptor = ht.dag_hash) -> Dict[str, Any]:
         """Create a dictionary suitable for writing this spec to YAML or JSON.
 
         This dictionary is like the one that is ultimately written to a ``spec.json`` file in each
@@ -2534,9 +2529,7 @@ class Spec:
 
         return {"spec": {"_meta": {"version": SPECFILE_FORMAT_VERSION}, "nodes": node_list}}
 
-    def node_dict_with_hashes(
-        self, hash: ht.SpecHashDescriptor = ht.dag_hash  # type: ignore[has-type]
-    ) -> Dict[str, Any]:
+    def node_dict_with_hashes(self, hash: ht.SpecHashDescriptor = ht.dag_hash) -> Dict[str, Any]:
         """Returns a node dict of this spec with the dag hash, and the provided hash (if not
         the dag hash)."""
         node = self.to_node_dict(hash)
