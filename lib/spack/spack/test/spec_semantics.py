@@ -9,8 +9,8 @@ import pytest
 import spack.concretize
 import spack.deptypes as dt
 import spack.directives
-import spack.error
 import spack.llnl.util.lang
+import spack.package_base
 import spack.paths
 import spack.solver.asp
 import spack.spec
@@ -18,7 +18,9 @@ import spack.spec_parser
 import spack.store
 import spack.variant
 import spack.version as vn
+from spack.enums import PropagationPolicy
 from spack.error import SpecError, UnsatisfiableSpecError
+from spack.llnl.util.tty.color import colorize
 from spack.spec import ArchSpec, DependencySpec, Spec, SpecFormatSigilError, SpecFormatStringError
 from spack.variant import (
     InvalidVariantValueError,
@@ -1976,6 +1978,21 @@ def test_constrain(factory, lhs_str, rhs_str, result, constrained_str):
     assert rhs == factory(constrained_str)
 
 
+def test_constrain_dependencies_copies(mock_packages):
+    """Tests that constraining a spec with new deps makes proper copies, and does not accidentally
+    share dependency instances, leading to corruption of unrelated Spec instances."""
+    x = Spec("root")
+    y = Spec("^foo")
+    z = Spec("%foo +bar")
+    assert x.constrain(y)
+    assert x == Spec("root ^foo")
+    assert x.constrain(z)
+    assert x == Spec("root %foo +bar")
+    assert not x.constrain(Spec("root %foo +bar"))  # no new constraints
+    # now, double check that we did not mutate `y` after constraining `x` with `z`.
+    assert y == Spec("^foo")
+
+
 def test_abstract_hash_intersects_and_satisfies(default_mock_concretization):
     concrete: Spec = default_mock_concretization("pkg-a")
     hash = concrete.dag_hash()
@@ -2355,3 +2372,140 @@ def test_constrain_symbolically(constraints, expected):
     for c in reversed(constraints):
         reverse_order._constrain_symbolically(c)
     assert reverse_order == Spec(expected)
+
+
+@pytest.mark.parametrize(
+    "parent_str,child_str,kwargs,expected_str,expected_repr",
+    [
+        (
+            "mpileaks",
+            "callpath",
+            {"virtuals": ()},
+            "mpileaks ^callpath",
+            "DependencySpec('mpileaks', 'callpath', depflag=0, virtuals=())",
+        ),
+        (
+            "mpileaks",
+            "callpath",
+            {"virtuals": ("mpi", "lapack")},
+            "mpileaks ^[virtuals=lapack,mpi] callpath",
+            "DependencySpec('mpileaks', 'callpath', depflag=0, virtuals=('lapack', 'mpi'))",
+        ),
+        (
+            "",
+            "callpath",
+            {"virtuals": ("mpi", "lapack"), "direct": True},
+            " %[virtuals=lapack,mpi] callpath",
+            "DependencySpec('', 'callpath', depflag=0, virtuals=('lapack', 'mpi'), direct=True)",
+        ),
+        (
+            "",
+            "callpath",
+            {
+                "virtuals": ("mpi", "lapack"),
+                "direct": True,
+                "propagation": PropagationPolicy.PREFERENCE,
+            },
+            " %%[virtuals=lapack,mpi] callpath",
+            "DependencySpec('', 'callpath', depflag=0, virtuals=('lapack', 'mpi'), direct=True,"
+            " propagation=PropagationPolicy.PREFERENCE)",
+        ),
+        (
+            "",
+            "callpath",
+            {"virtuals": (), "direct": True, "propagation": PropagationPolicy.PREFERENCE},
+            " %%callpath",
+            "DependencySpec('', 'callpath', depflag=0, virtuals=(), direct=True,"
+            " propagation=PropagationPolicy.PREFERENCE)",
+        ),
+        (
+            "mpileaks+foo",
+            "callpath+bar",
+            {"virtuals": (), "direct": True, "propagation": PropagationPolicy.PREFERENCE},
+            "mpileaks+foo %%callpath+bar",
+            "DependencySpec('mpileaks+foo', 'callpath+bar', depflag=0, virtuals=(), direct=True,"
+            " propagation=PropagationPolicy.PREFERENCE)",
+        ),
+    ],
+)
+def test_edge_representation(parent_str, child_str, kwargs, expected_str, expected_repr):
+    """Tests the string representations of edges."""
+    parent = Spec(parent_str) or Spec()
+    child = Spec(child_str) or Spec()
+    edge = DependencySpec(parent, child, depflag=0, **kwargs)
+    assert str(edge) == expected_str
+    assert repr(edge) == expected_repr
+
+
+@pytest.mark.parametrize(
+    "spec_str,assertions",
+    [
+        # Check <key>=* semantics for a "regular" variant
+        ("mpileaks foo=abc", [("foo=*", True), ("bar=*", False)]),
+        # Check the semantics for architecture related key value pairs
+        (
+            "mpileaks",
+            [
+                ("target=*", False),
+                ("os=*", False),
+                ("platform=*", False),
+                ("target=* platform=*", False),
+            ],
+        ),
+        (
+            "mpileaks target=x86_64",
+            [
+                ("target=*", True),
+                ("os=*", False),
+                ("platform=*", False),
+                ("target=* platform=*", False),
+            ],
+        ),
+        ("mpileaks os=debian6", [("target=*", False), ("os=*", True), ("platform=*", False)]),
+        ("mpileaks platform=linux", [("target=*", False), ("os=*", False), ("platform=*", True)]),
+        ("mpileaks platform=linux", [("target=*", False), ("os=*", False), ("platform=*", True)]),
+        (
+            "mpileaks platform=linux target=x86_64",
+            [
+                ("target=*", True),
+                ("os=*", False),
+                ("platform=*", True),
+                ("target=* platform=*", True),
+            ],
+        ),
+    ],
+)
+def test_attribute_existence_in_satisfies(spec_str, assertions, mock_packages, config):
+    """Tests the semantics of <key>=* when used in Spec.satisfies"""
+    s = Spec(spec_str)
+    for test, expected in assertions:
+        assert s.satisfies(test) is expected
+
+
+@pytest.mark.regression("51768")
+@pytest.mark.parametrize("spec_str", ["mpi", "%mpi", "^mpi", "%foo", "%c=gcc", "%[when=%c]c=gcc"])
+def test_specs_semantics_on_self(spec_str, mock_packages, config):
+    """Tests that an abstract spec satisfies and intersects with itself."""
+    s = Spec(spec_str)
+    assert s.satisfies(s)
+    assert s.intersects(s)
+
+
+@pytest.mark.parametrize(
+    "spec_str,expected_fmt",
+    [
+        ("mpileaks@2.2", "mpileaks@_R{@=2.2}"),
+        ("mpileaks@2.3", "mpileaks@c{@=2.3}"),
+        ("mpileaks+debug", "@_R{+debug}"),
+    ],
+)
+def test_highlighting_spec_parts(spec_str, expected_fmt, default_mock_concretization):
+    """Tests correct highlighting of non-default versions and variants"""
+    s = default_mock_concretization(spec_str)
+    expected = colorize(expected_fmt, color=True)
+    colorized_str = s.format(
+        color=True,
+        highlight_version_fn=spack.package_base.non_preferred_version,
+        highlight_variant_fn=spack.package_base.non_default_variant,
+    )
+    assert expected in colorized_str

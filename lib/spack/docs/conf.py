@@ -271,9 +271,10 @@ extensions = [
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
-    "sphinxcontrib.programoutput",
     "sphinx_last_updated_by_git",
     "sphinx_sitemap",
+    "sphinxcontrib.inkscapeconverter",
+    "sphinxcontrib.programoutput",
 ]
 
 copybutton_exclude = ".linenos, .gp, .go"
@@ -341,49 +342,42 @@ exclude_patterns = ["_build", "_spack_root", ".spack-env", ".spack", ".venv"]
 
 autodoc_mock_imports = ["llnl"]
 autodoc_default_options = {"no-value": True}
+autodoc_preserve_defaults = True
 
 nitpicky = True
 nitpick_ignore = [
     # Python classes that intersphinx is unable to resolve
     ("py:class", "argparse.HelpFormatter"),
-    ("py:class", "contextlib.contextmanager"),
-    ("py:class", "module"),
-    ("py:class", "_io.BufferedReader"),
-    ("py:class", "_io.BytesIO"),
-    ("py:class", "unittest.case.TestCase"),
-    ("py:class", "_frozen_importlib_external.SourceFileLoader"),
-    ("py:class", "clingo.Control"),
-    ("py:class", "six.moves.urllib.parse.ParseResult"),
-    ("py:class", "TextIO"),
-    ("py:class", "hashlib._Hash"),
     ("py:class", "concurrent.futures._base.Executor"),
-    ("py:class", "multiprocessing.context.Process"),
+    ("py:class", "hashlib._Hash"),
+    ("py:class", "multiprocessing.context.BaseContext"),
+    ("py:class", "posix.DirEntry"),
     # Spack classes that are private and we don't want to expose
-    ("py:class", "spack.provider_index._IndexBase"),
-    ("py:class", "spack.repo._PrependFileLoader"),
     ("py:class", "spack_repo.builtin.build_systems._checks.BuilderWithDefaults"),
+    ("py:class", "spack.repo._PrependFileLoader"),
     # Spack classes that intersphinx is unable to resolve
-    ("py:class", "spack.version.StandardVersion"),
-    ("py:class", "spack.spec.DependencySpec"),
+    ("py:class", "GitOrStandardVersion"),
+    ("py:class", "spack.bootstrap._common.QueryInfo"),
+    ("py:class", "spack.filesystem_view.SimpleFilesystemView"),
     ("py:class", "spack.spec.ArchSpec"),
+    ("py:class", "spack.spec.DependencySpec"),
     ("py:class", "spack.spec.InstallStatus"),
     ("py:class", "spack.spec.SpecfileReaderBase"),
-    ("py:class", "spack.filesystem_view.SimpleFilesystemView"),
     ("py:class", "spack.traverse.EdgeAndDepth"),
     ("py:class", "spack.vendor.archspec.cpu.microarchitecture.Microarchitecture"),
-    ("py:class", "spack.compiler.CompilerCache"),
+    ("py:class", "spack.vendor.jinja2.Environment"),
     # TypeVar that is not handled correctly
-    ("py:class", "spack.llnl.util.lang.T"),
-    ("py:class", "spack.llnl.util.lang.KT"),
-    ("py:class", "spack.llnl.util.lang.VT"),
-    ("py:class", "spack.llnl.util.lang.K"),
-    ("py:class", "spack.llnl.util.lang.V"),
     ("py:class", "spack.llnl.util.lang.ClassPropertyType"),
-    ("py:obj", "spack.llnl.util.lang.KT"),
-    ("py:obj", "spack.llnl.util.lang.VT"),
+    ("py:class", "spack.llnl.util.lang.K"),
+    ("py:class", "spack.llnl.util.lang.KT"),
+    ("py:class", "spack.llnl.util.lang.T"),
+    ("py:class", "spack.llnl.util.lang.V"),
+    ("py:class", "spack.llnl.util.lang.VT"),
     ("py:obj", "spack.llnl.util.lang.ClassPropertyType"),
     ("py:obj", "spack.llnl.util.lang.K"),
+    ("py:obj", "spack.llnl.util.lang.KT"),
     ("py:obj", "spack.llnl.util.lang.V"),
+    ("py:obj", "spack.llnl.util.lang.VT"),
 ]
 
 # The reST default role (used for this markup: `text`) to use for all documents.
@@ -497,6 +491,8 @@ sitemap_excludes = ["search.html", "_modules/*"]
 
 # -- Options for LaTeX output --------------------------------------------------
 
+latex_engine = "lualatex"
+
 latex_elements = {
     # The paper size ('letterpaper' or 'a4paper').
     # 'papersize': 'letterpaper',
@@ -508,7 +504,7 @@ latex_elements = {
 
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
-latex_documents = [("index", "Spack.tex", "Spack Documentation", "Todd Gamblin", "manual")]
+latex_documents = [("index", "Spack.tex", "Spack Documentation", "", "manual")]
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.

@@ -1,8 +1,9 @@
-.. Copyright Spack Project Developers. See COPYRIGHT file for details.
+.. 
+   Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
-.. Spack documentation master file, created by
+   Spack documentation master file, created by
    sphinx-quickstart on Mon Dec  9 15:32:41 2013.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
@@ -105,8 +106,10 @@ If you're new to Spack and want to start using it, see :doc:`getting_started`, o
    packaging_guide_testing
    packaging_guide_advanced
    build_systems
+   roles_and_responsibilities
    contribution_guide
    developer_guide
+   package_review_guide
 
 .. toctree::
    :maxdepth: 2

@@ -9,6 +9,7 @@ import pathlib
 import pytest
 
 import spack.caches
+import spack.cmd.mirror
 import spack.concretize
 import spack.config
 import spack.fetch_strategy
@@ -17,7 +18,6 @@ import spack.mirrors.mirror
 import spack.mirrors.utils
 import spack.patch
 import spack.stage
-import spack.util.executable
 import spack.util.spack_json as sjson
 import spack.util.url as url_util
 from spack.cmd.common.arguments import mirror_name_or_url
@@ -61,7 +61,7 @@ def check_mirror():
         with spack.config.override("mirrors", mirrors):
             with spack.config.override("config:checksum", False):
                 specs = [spack.concretize.concretize_one(x) for x in repos]
-                spack.mirrors.utils.create(mirror_root, specs)
+                spack.cmd.mirror.create(mirror_root, specs)
 
             # Stage directory exists
             assert os.path.isdir(mirror_root)
@@ -254,7 +254,7 @@ def test_mirror_with_url_patches(mock_packages, monkeypatch):
         )
 
         with spack.config.override("config:checksum", False):
-            spack.mirrors.utils.create(mirror_root, list(spec.traverse()))
+            spack.cmd.mirror.create(mirror_root, list(spec.traverse()))
 
         assert {
             "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",

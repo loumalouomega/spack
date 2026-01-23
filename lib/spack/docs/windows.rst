@@ -1,4 +1,5 @@
-.. Copyright Spack Project Developers. See COPYRIGHT file for details.
+..
+   Copyright Spack Project Developers. See COPYRIGHT file for details.
 
    SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
@@ -105,7 +106,7 @@ In order to install Spack with Windows support, run the following one-liner in a
 Step 3: Run and configure Spack
 -------------------------------
 
-On Windows, Spack supports both primary native shells, Powershell and the traditional command prompt.
+On Windows, Spack supports both primary native shells, PowerShell and the traditional command prompt.
 To use Spack, pick your favorite shell, and run ``bin\spack_cmd.bat`` or ``share/spack/setup-env.ps1`` (you may need to Run as Administrator) from the top-level Spack directory.
 This will provide a Spack-enabled shell.
 If you receive a warning message that Python is not in your ``PATH`` (which may happen if you installed Python from the website and not the Windows Store), add the location of the Python executable to your ``PATH`` now.

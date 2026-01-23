@@ -10,7 +10,6 @@ import functools
 import importlib
 import importlib.machinery
 import importlib.util
-import inspect
 import itertools
 import os
 import re
@@ -45,8 +44,10 @@ import spack.llnl.path
 import spack.llnl.util.filesystem as fs
 import spack.llnl.util.lang
 import spack.llnl.util.tty as tty
+import spack.patch
 import spack.paths
 import spack.provider_index
+import spack.tag
 import spack.util.executable
 import spack.util.file_cache
 import spack.util.git
@@ -59,9 +60,7 @@ from spack.llnl.util.filesystem import working_dir
 
 if TYPE_CHECKING:
     import spack.package_base
-    import spack.patch
     import spack.spec
-    import spack.tag
 
 PKG_MODULE_PREFIX_V1 = "spack.pkg."
 PKG_MODULE_PREFIX_V2 = "spack_repo."
@@ -322,23 +321,6 @@ def autospec(function):
     return converter
 
 
-def is_package_file(filename):
-    """Determine whether we are in a package file from a repo."""
-    # Package files are named `package.py` and are not in lib/spack/spack
-    # We have to remove the file extension because it can be .py and can be
-    # .pyc depending on context, and can differ between the files
-    import spack.package_base  # break cycle
-
-    filename_noext = os.path.splitext(filename)[0]
-    packagebase_filename_noext = os.path.splitext(inspect.getfile(spack.package_base.PackageBase))[
-        0
-    ]
-    return (
-        filename_noext != packagebase_filename_noext
-        and os.path.basename(filename_noext) == "package"
-    )
-
-
 class SpackNamespace(types.ModuleType):
     """Allow lazy loading of modules."""
 
@@ -361,17 +343,27 @@ class SpackNamespace(types.ModuleType):
         return getattr(self, name)
 
 
-class FastPackageChecker(Mapping[str, os.stat_result]):
-    """Cache that maps package names to the stats obtained on the
-    ``package.py`` files associated with them.
+@contextlib.contextmanager
+def _directory_fd(path: str) -> Generator[Optional[int], None, None]:
+    if sys.platform == "win32":
+        yield None
+        return
 
-    For each repository a cache is maintained at class level, and shared among
-    all instances referring to it. Update of the global cache is done lazily
-    during instance initialization.
-    """
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        yield fd
+    finally:
+        os.close(fd)
+
+
+class FastPackageChecker(Mapping[str, float]):
+    """Cache that maps package names to the modification times of their ``package.py`` files.
+
+    For each repository a cache is maintained at class level, and shared among all instances
+    referring to it. Update of the global cache is done lazily during instance initialization."""
 
     #: Global cache, reused by every instance
-    _paths_cache: Dict[str, Dict[str, os.stat_result]] = {}
+    _paths_cache: Dict[str, Dict[str, float]] = {}
 
     def __init__(self, packages_path: str, package_api: Tuple[int, int]) -> None:
         # The path of the repository managed by this instance
@@ -383,39 +375,45 @@ class FastPackageChecker(Mapping[str, os.stat_result]):
             self._paths_cache[packages_path] = self._create_new_cache()
 
         #: Reference to the appropriate entry in the global cache
-        self._packages_to_stats = self._paths_cache[packages_path]
+        self._packages_to_mtime = self._paths_cache[packages_path]
 
     def invalidate(self) -> None:
         """Regenerate cache for this checker."""
         self._paths_cache[self.packages_path] = self._create_new_cache()
-        self._packages_to_stats = self._paths_cache[self.packages_path]
+        self._packages_to_mtime = self._paths_cache[self.packages_path]
 
-    def _create_new_cache(self) -> Dict[str, os.stat_result]:
+    def _create_new_cache(self) -> Dict[str, float]:
         """Create a new cache for packages in a repo.
 
-        The implementation here should try to minimize filesystem
-        calls.  At the moment, it is O(number of packages) and makes
-        about one stat call per package.  This is reasonably fast, and
-        avoids actually importing packages in Spack, which is slow.
-        """
+        The implementation here should try to minimize filesystem calls. At the moment, it makes
+        one stat call per package. This is reasonably fast, and avoids actually importing packages
+        in Spack, which is slow."""
         # Create a dictionary that will store the mapping between a
-        # package name and its stat info
-        cache: Dict[str, os.stat_result] = {}
-        with os.scandir(self.packages_path) as entries:
+        # package name and its mtime
+        cache: Dict[str, float] = {}
+        # Don't use os.path.join in the loop cause it's slow and redundant.
+        package_py_suffix = f"{os.path.sep}{package_file_name}"
+
+        # Use a file descriptor for the packages directory to avoid repeated path resolution.
+        with _directory_fd(self.packages_path) as fd, os.scandir(self.packages_path) as entries:
             for entry in entries:
                 # Construct the file name from the directory
-                pkg_file = os.path.join(entry.path, package_file_name)
+                if sys.platform == "win32":
+                    pkg_file = f"{entry.path}{package_py_suffix}"
+                else:
+                    pkg_file = f"{entry.name}{package_py_suffix}"
 
                 try:
-                    sinfo = os.stat(pkg_file)
+                    sinfo = os.stat(pkg_file, dir_fd=fd)
                 except OSError as e:
                     if e.errno in (errno.ENOENT, errno.ENOTDIR):
                         # No package.py file here.
                         continue
                     elif e.errno == errno.EACCES:
+                        pkg_file = os.path.join(self.packages_path, entry.name, package_file_name)
                         tty.warn(f"Can't read package file {pkg_file}.")
                         continue
-                    raise e
+                    raise
 
                 # If it's not a file, skip it.
                 if not stat.S_ISREG(sinfo.st_mode):
@@ -425,31 +423,32 @@ class FastPackageChecker(Mapping[str, os.stat_result]):
                 # the current package API
                 if not nm.valid_module_name(entry.name, self.package_api):
                     x, y = self.package_api
+                    pkg_file = os.path.join(self.packages_path, entry.name, package_file_name)
                     tty.warn(
                         f"Package {pkg_file} cannot be used because `{entry.name}` is not a valid "
                         f"Spack package module name for Package API v{x}.{y}."
                     )
                     continue
 
-                # Store the stat info by package name.
-                cache[nm.pkg_dir_to_pkg_name(entry.name, self.package_api)] = sinfo
+                # Store the mtime by package name.
+                cache[nm.pkg_dir_to_pkg_name(entry.name, self.package_api)] = sinfo.st_mtime
 
         return cache
 
     def last_mtime(self) -> float:
-        return max(sinfo.st_mtime for sinfo in self._packages_to_stats.values())
+        return max(self._packages_to_mtime.values())
 
     def modified_since(self, since: float) -> List[str]:
-        return [name for name, sinfo in self._packages_to_stats.items() if sinfo.st_mtime > since]
+        return [name for name, mtime in self._packages_to_mtime.items() if mtime > since]
 
-    def __getitem__(self, item: str) -> os.stat_result:
-        return self._packages_to_stats[item]
+    def __getitem__(self, item: str) -> float:
+        return self._packages_to_mtime[item]
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._packages_to_stats)
+        return iter(self._packages_to_mtime)
 
     def __len__(self) -> int:
-        return len(self._packages_to_stats)
+        return len(self._packages_to_mtime)
 
 
 class Indexer(metaclass=abc.ABCMeta):
@@ -497,18 +496,14 @@ class Indexer(metaclass=abc.ABCMeta):
 class TagIndexer(Indexer):
     """Lifecycle methods for a TagIndex on a Repo."""
 
-    def _create(self) -> "spack.tag.TagIndex":
-        from spack.tag import TagIndex
-
-        return TagIndex(self.repository)
+    def _create(self) -> spack.tag.TagIndex:
+        return spack.tag.TagIndex()
 
     def read(self, stream):
-        from spack.tag import TagIndex
-
-        self.index = TagIndex.from_json(stream, self.repository)
+        self.index = spack.tag.TagIndex.from_json(stream)
 
     def update(self, pkg_fullname):
-        self.index.update_package(pkg_fullname.split(".")[-1])
+        self.index.update_package(pkg_fullname.split(".")[-1], self.repository)
 
     def write(self, stream):
         self.index.to_json(stream)
@@ -540,10 +535,8 @@ class ProviderIndexer(Indexer):
 class PatchIndexer(Indexer):
     """Lifecycle methods for patch cache."""
 
-    def _create(self) -> "spack.patch.PatchCache":
-        from spack.patch import PatchCache
-
-        return PatchCache(repository=self.repository)
+    def _create(self) -> spack.patch.PatchCache:
+        return spack.patch.PatchCache(repository=self.repository)
 
     def needs_update(self):
         # TODO: patches can change under a package and we should handle
@@ -553,9 +546,7 @@ class PatchIndexer(Indexer):
         return False
 
     def read(self, stream):
-        from spack.patch import PatchCache
-
-        self.index = PatchCache.from_json(stream, repository=self.repository)
+        self.index = spack.patch.PatchCache.from_json(stream, repository=self.repository)
 
     def write(self, stream):
         self.index.to_json(stream)
@@ -673,8 +664,8 @@ class RepoPath:
         self.repos: List[Repo] = []
         self.by_namespace = nm.NamespaceTrie()
         self._provider_index: Optional[spack.provider_index.ProviderIndex] = None
-        self._patch_index: Optional["spack.patch.PatchCache"] = None
-        self._tag_index: Optional["spack.tag.TagIndex"] = None
+        self._patch_index: Optional[spack.patch.PatchCache] = None
+        self._tag_index: Optional[spack.tag.TagIndex] = None
 
         for repo in repos:
             self.put_last(repo)
@@ -699,7 +690,7 @@ class RepoPath:
         """Create a RepoPath from a configuration object."""
         overrides = {
             pkg_name: data["package_attributes"]
-            for pkg_name, data in config.get("packages").items()
+            for pkg_name, data in config.get_config("packages").items()
             if pkg_name != "all" and "package_attributes" in data
         }
 
@@ -812,18 +803,16 @@ class RepoPath:
         return self._provider_index
 
     @property
-    def tag_index(self) -> "spack.tag.TagIndex":
+    def tag_index(self) -> spack.tag.TagIndex:
         """Merged TagIndex from all Repos in the RepoPath."""
         if self._tag_index is None:
-            from spack.tag import TagIndex
-
-            self._tag_index = TagIndex(repository=self)
+            self._tag_index = spack.tag.TagIndex()
             for repo in reversed(self.repos):
                 self._tag_index.merge(repo.tag_index)
         return self._tag_index
 
     @property
-    def patch_index(self) -> "spack.patch.PatchCache":
+    def patch_index(self) -> spack.patch.PatchCache:
         """Merged PatchIndex from all Repos in the RepoPath."""
         if self._patch_index is None:
             from spack.patch import PatchCache
@@ -833,15 +822,15 @@ class RepoPath:
                 self._patch_index.update(repo.patch_index)
         return self._patch_index
 
-    @autospec
-    def providers_for(self, virtual_spec: "spack.spec.Spec") -> List["spack.spec.Spec"]:
+    def providers_for(self, virtual: Union[str, "spack.spec.Spec"]) -> List["spack.spec.Spec"]:
+        all_packages = self._all_package_names_set(include_virtuals=False)
         providers = [
             spec
-            for spec in self.provider_index.providers_for(virtual_spec)
-            if spec.name in self._all_package_names_set(include_virtuals=False)
+            for spec in self.provider_index.providers_for(virtual)
+            if spec.name in all_packages
         ]
         if not providers:
-            raise UnknownPackageError(virtual_spec.fullname)
+            raise UnknownPackageError(virtual if isinstance(virtual, str) else virtual.fullname)
         return providers
 
     @autospec
@@ -931,12 +920,6 @@ class RepoPath:
         """
         return any(repo.exists(pkg_name) for repo in self.repos)
 
-    def _have_name(self, pkg_name: str) -> bool:
-        have_name = pkg_name is not None
-        if have_name and not isinstance(pkg_name, str):
-            raise ValueError(f"is_virtual(): expected package name, got {type(pkg_name)}")
-        return have_name
-
     def is_virtual(self, pkg_name: str) -> bool:
         """Return True if the package with this name is virtual, False otherwise.
 
@@ -944,9 +927,9 @@ class RepoPath:
         is used to construct the provider index use the ``is_virtual_safe`` function.
 
         Args:
-            pkg_name (str): name of the package we want to check
+            pkg_name: name of the package we want to check
         """
-        have_name = self._have_name(pkg_name)
+        have_name = bool(pkg_name)
         return have_name and pkg_name in self.provider_index
 
     def is_virtual_safe(self, pkg_name: str) -> bool:
@@ -955,9 +938,9 @@ class RepoPath:
         This function doesn't use the provider index.
 
         Args:
-            pkg_name (str): name of the package we want to check
+            pkg_name: name of the package we want to check
         """
-        have_name = self._have_name(pkg_name)
+        have_name = bool(pkg_name)
         return have_name and (not self.exists(pkg_name) or self.get_pkg_class(pkg_name).virtual)
 
     def __contains__(self, pkg_name):
@@ -1232,7 +1215,7 @@ class Repo:
         # actually exists, because we have to load it anyway, and that ends up
         # checking for existence. We avoid constructing FastPackageChecker,
         # which will stat all packages.
-        if spec.name is None:
+        if not spec.name:
             raise UnknownPackageError(None, self)
 
         if spec.namespace and spec.namespace != self.namespace:
@@ -1297,20 +1280,19 @@ class Repo:
         return self.index["providers"]
 
     @property
-    def tag_index(self) -> "spack.tag.TagIndex":
+    def tag_index(self) -> spack.tag.TagIndex:
         """Index of tags and which packages they're defined on."""
         return self.index["tags"]
 
     @property
-    def patch_index(self) -> "spack.patch.PatchCache":
+    def patch_index(self) -> spack.patch.PatchCache:
         """Index of patches and packages they're defined on."""
         return self.index["patches"]
 
-    @autospec
-    def providers_for(self, vpkg_spec: "spack.spec.Spec") -> List["spack.spec.Spec"]:
-        providers = self.provider_index.providers_for(vpkg_spec)
+    def providers_for(self, virtual: Union[str, "spack.spec.Spec"]) -> List["spack.spec.Spec"]:
+        providers = self.provider_index.providers_for(virtual)
         if not providers:
-            raise UnknownPackageError(vpkg_spec.fullname)
+            raise UnknownPackageError(virtual if isinstance(virtual, str) else virtual.fullname)
         return providers
 
     @autospec
@@ -1366,7 +1348,8 @@ class Repo:
 
     def packages_with_tags(self, *tags: str) -> Set[str]:
         v = set(self.all_package_names())
-        v.intersection_update(*(self.tag_index[tag.lower()] for tag in tags))
+        for tag in tags:
+            v.intersection_update(self.tag_index.get_packages(tag.lower()))
         return v
 
     def all_package_classes(self) -> Generator[Type["spack.package_base.PackageBase"], None, None]:
@@ -1440,6 +1423,14 @@ class Repo:
         cls = getattr(module, class_name)
         if not isinstance(cls, type):
             tty.die(f"{pkg_name}.{class_name} is not a class")
+
+        # Early exit if no overrides to apply or undo
+        if (
+            not self.overrides.get(pkg_name)
+            and not hasattr(cls, "overridden_attrs")
+            and not hasattr(cls, "attrs_exclusively_from_config")
+        ):
+            return cls
 
         def defining_class(myclass, name):
             return next((c for c in myclass.__mro__ if name in c.__dict__), None)
@@ -1736,14 +1727,26 @@ class RemoteRepoDescriptor(RepoDescriptor):
                         # determine the default branch from ls-remote
                         # (if no branch, tag, or commit is specified)
                         if not (self.commit or self.tag or self.branch):
-                            refs = git("ls-remote", "--symref", remote, "HEAD", output=str)
-                            ref_match = re.search(r"refs/heads/(\S+)", refs)
-                            if not ref_match:
+                            # Get HEAD and all branches. On more recent versions of git, this can
+                            # be done with a single call to `git ls-remote --symref remote HEAD`.
+                            refs = git("ls-remote", remote, "HEAD", "refs/heads/*", output=str)
+                            head_match = re.search(r"^([0-9a-f]+)\s+HEAD$", refs, re.MULTILINE)
+                            if not head_match:
+                                self.error = f"Unable to locate HEAD for {self.repository}"
+                                return
+
+                            head_sha = head_match.group(1)
+
+                            # Find the first branch that matches this SHA
+                            branch_match = re.search(
+                                rf"^{re.escape(head_sha)}\s+refs/heads/(\S+)$", refs, re.MULTILINE
+                            )
+                            if not branch_match:
                                 self.error = (
                                     f"Unable to locate a default branch for {self.repository}"
                                 )
                                 return
-                            self.branch = ref_match.group(1)
+                            self.branch = branch_match.group(1)
 
                     # determine the branch and remote if no config values exist
                     elif not (self.commit or self.tag or self.branch):
@@ -1751,11 +1754,13 @@ class RemoteRepoDescriptor(RepoDescriptor):
                         remote = git("config", f"branch.{self.branch}.remote", output=str).strip()
 
                     if self.commit:
-                        spack.util.git.pull_checkout_commit(self.commit, git_exe=git)
+                        spack.util.git.pull_checkout_commit(
+                            self.commit, remote=remote, depth=depth, git_exe=git
+                        )
 
                     elif self.tag:
                         spack.util.git.pull_checkout_tag(
-                            self.tag, remote, depth=depth, git_exe=git
+                            self.tag, remote=remote, depth=depth, git_exe=git
                         )
 
                     elif self.branch:
@@ -1902,7 +1907,7 @@ class RepoDescriptors(Mapping[str, RepoDescriptor]):
         return RepoDescriptors(
             {
                 name: parse_config_descriptor(name, cfg, lock)
-                for name, cfg in config.get("repos", scope=scope).items()
+                for name, cfg in config.get_config("repos", scope=scope).items()
             }
         )
 

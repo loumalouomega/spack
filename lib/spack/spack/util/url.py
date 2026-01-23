@@ -6,11 +6,11 @@
 Utility functions for parsing, formatting, and manipulating URLs.
 """
 
-import os
 import posixpath
 import re
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Optional
 
 from spack.util.path import sanitize_filename
@@ -40,9 +40,7 @@ def local_file_path(url):
 
 
 def path_to_file_url(path):
-    if not os.path.isabs(path):
-        path = os.path.abspath(path)
-    return urllib.parse.urljoin("file:", urllib.request.pathname2url(path))
+    return Path(path).absolute().as_uri()
 
 
 def file_url_string_to_path(url):
@@ -83,17 +81,17 @@ def join(base: str, *components: str, resolve_href: bool = False, **kwargs) -> s
         parsed = urllib.parse.urlparse(base)
         if not parsed.path.endswith("/"):
             base = parsed._replace(path=f"{parsed.path}/").geturl()
-    uses_netloc = urllib.parse.uses_netloc
-    uses_relative = urllib.parse.uses_relative
+    old_netloc = urllib.parse.uses_netloc
+    old_relative = urllib.parse.uses_relative
     try:
         # NOTE: we temporarily modify urllib internals so s3 and gs schemes are treated like http.
         # This is non-portable, and may be forward incompatible with future cpython versions.
-        urllib.parse.uses_netloc = [*uses_netloc, "s3", "gs", "oci", "oci+http"]
-        urllib.parse.uses_relative = [*uses_relative, "s3", "gs", "oci", "oci+http"]
+        urllib.parse.uses_netloc = [*old_netloc, "s3", "gs", "oci", "oci+http"]  # type: ignore
+        urllib.parse.uses_relative = [*old_relative, "s3", "gs", "oci", "oci+http"]  # type: ignore
         return urllib.parse.urljoin(base, "/".join(components), **kwargs)
     finally:
-        urllib.parse.uses_netloc = uses_netloc
-        urllib.parse.uses_relative = uses_relative
+        urllib.parse.uses_netloc = old_netloc  # type: ignore
+        urllib.parse.uses_relative = old_relative  # type: ignore
 
 
 def default_download_filename(url: str) -> str:
