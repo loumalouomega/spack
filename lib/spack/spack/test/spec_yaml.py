@@ -7,6 +7,7 @@
 The YAML and JSON formats preserve DAG information in the spec.
 
 """
+
 import collections
 import collections.abc
 import gzip
@@ -185,8 +186,8 @@ def test_ordered_read_not_required_for_consistent_dag_hash(
     # Dump to YAML and JSON
     yaml_string = syaml.dump(spec_dict, default_flow_style=False)
     yaml_string_rev = syaml.dump(spec_dict_rev, default_flow_style=False)
-    json_string = sjson.dump(spec_dict)
-    json_string_rev = sjson.dump(spec_dict_rev)
+    json_string = sjson.dumps(spec_dict)
+    json_string_rev = sjson.dumps(spec_dict_rev)
 
     # spec yaml is ordered like the spec dict
     assert yaml_string == spec_yaml
@@ -440,9 +441,10 @@ def test_load_json_specfiles(specfile, expected_hash, reader_cls):
     assert s2.format("{compiler.name}") == "gcc"
     assert s2.format("{compiler.version}") != "none"
 
-    # Ensure satisfies still works with compilers
+    # Ensure satisfies works with compilers and direct dependencies
     assert s2.satisfies("%gcc")
     assert s2.satisfies("%gcc@9.4.0")
+    assert s2.satisfies("%zlib")
 
 
 def test_anchorify_1():

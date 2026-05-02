@@ -25,6 +25,7 @@ import spack.spec
 import spack.stage
 import spack.store
 import spack.util.parallel
+import spack.util.timer as timer_mod
 import spack.util.web as web_util
 from spack import traverse
 from spack.binary_distribution import BINARY_INDEX
@@ -119,6 +120,12 @@ def setup_parser(subparser: argparse.ArgumentParser):
         help="stop pushing on first failure (default is best effort)",
     )
     push.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="allow not installed specs to continue without failure (default fails on missing "
+        "specs)",
+    )
+    push.add_argument(
         "--base-image", default=None, help="specify the base image for the buildcache"
     )
     push.add_argument(
@@ -132,6 +139,15 @@ def setup_parser(subparser: argparse.ArgumentParser):
         "--private",
         action="store_true",
         help="for a private mirror, include non-redistributable packages",
+    )
+    push.add_argument(
+        "--group",
+        action="append",
+        default=None,
+        dest="groups",
+        metavar="GROUP",
+        help="push only specs from the given environment group "
+        "(can be specified multiple times, requires an active environment)",
     )
     arguments.add_common_arguments(push, ["specs", "jobs"])
     push.set_defaults(func=push_fn)
@@ -332,7 +348,7 @@ def setup_parser(subparser: argparse.ArgumentParser):
         "-a",
         action="store_true",
         help="Append the listed specs to the current view index if it already exists. "
-        "This operation does not guarentee atomic write and should be run with care.",
+        "This operation does not guarantee atomic write and should be run with care.",
     )
     update_index_view_mode_args.add_argument(
         "--force",
@@ -445,7 +461,20 @@ def _specs_to_be_packaged(
 
 def push_fn(args):
     """create a binary package and push it to a mirror"""
-    if args.specs:
+    if args.specs and args.groups:
+        tty.die("--group and explicit specs are mutually exclusive")
+
+    if args.groups:
+        env = spack.cmd.require_active_env(cmd_name="buildcache push")
+        available_groups = env.manifest.groups()
+        if any(g not in available_groups for g in args.groups):
+            tty.die(
+                f"Some of the groups do not exist in the environment. "
+                f"Available groups are: {', '.join(sorted(available_groups))}"
+            )
+
+        roots = [c for g in args.groups for _, c in env.concretized_specs_by(group=g)]
+    elif args.specs:
         roots = _matching_specs(spack.cmd.parse_specs(args.specs))
     else:
         roots = spack.cmd.require_active_env(cmd_name="buildcache push").concrete_roots()
@@ -492,8 +521,14 @@ def push_fn(args):
     with spack.store.STORE.db.read_transaction():
         if any(not s.installed for s in specs):
             specs, not_installed = stable_partition(specs, lambda s: s.installed)
-            if args.fail_fast:
+            if args.fail_fast and not args.allow_missing:
                 raise PackagesAreNotInstalledError(not_installed)
+            elif args.allow_missing:
+                tty.warn(
+                    f"The following {len(not_installed)} specs are not installed and will be "
+                    "skipped: \n"
+                    + "\n".join(elide_list([f"    {_format_spec(s)}" for s in not_installed], 5))
+                )
             else:
                 failed.extend(
                     (s, PackageNotInstalledError("package not installed")) for s in not_installed
@@ -757,7 +792,7 @@ def sync_fn(args):
         # specified, the second is ignored and the first is the override
         # destination.
         if args.dest_mirror:
-            tty.warn(f"Ignoring unused arguemnt: {args.dest_mirror.name}")
+            tty.warn(f"Ignoring unused argument: {args.dest_mirror.name}")
 
         manifest_copy(glob.glob(args.manifest_glob), args.src_mirror)
         return 0
@@ -796,7 +831,7 @@ def manifest_copy(
     manifest_file_list: List[str], dest_mirror: Optional[spack.mirrors.mirror.Mirror] = None
 ):
     """Read manifest files containing information about specific specs to copy
-    from source to destination, remove duplicates since any binary packge for
+    from source to destination, remove duplicates since any binary package for
     a given hash should be the same as any other, and copy all files specified
     in the manifest files."""
     deduped_manifest = {}
@@ -824,7 +859,10 @@ def manifest_copy(
         copy_buildcache_entry(src_cache_entry, destination_url)
 
 
-def update_index(mirror: spack.mirrors.mirror.Mirror, update_keys=False):
+def update_index(
+    mirror: spack.mirrors.mirror.Mirror, update_keys=False, timer=timer_mod.NULL_TIMER
+):
+    timer.start()
     # Special case OCI images for now.
     try:
         image_ref = spack.oci.oci.image_from_mirror(mirror)
@@ -842,7 +880,7 @@ def update_index(mirror: spack.mirrors.mirror.Mirror, update_keys=False):
     url = mirror.push_url
 
     with tempfile.TemporaryDirectory(dir=spack.stage.get_stage_root()) as tmpdir:
-        spack.binary_distribution._url_generate_package_index(url, tmpdir)
+        spack.binary_distribution._url_generate_package_index(url, tmpdir, timer=timer)
 
     if update_keys:
         mirror_update_keys(mirror)
@@ -942,7 +980,9 @@ def update_view(
             cache_index = BINARY_INDEX._local_index_cache.get(str(mirror_metadata))
             if cache_index:
                 cache_key = cache_index["index_path"]
-                db._read_from_file(BINARY_INDEX._index_file_cache.cache_path(cache_key))
+                with BINARY_INDEX._index_file_cache.read_transaction(cache_key) as f:
+                    if f is not None:
+                        db._read_from_stream(f)
 
         spack.binary_distribution._url_generate_package_index(url, tmpdir, db, name, filter_fn)
 
@@ -1002,9 +1042,9 @@ def check_index_fn(args):
             db = spack.binary_distribution.BuildCacheDatabase(tmpdir)
             cache_entry = BINARY_INDEX._local_index_cache[str(mirror_metadata)]
             cache_key = cache_entry["index_path"]
-            cache_path = BINARY_INDEX._index_file_cache.cache_path(cache_key)
-            with BINARY_INDEX._index_file_cache.read_transaction(cache_key):
-                db._read_from_file(cache_path)
+            with BINARY_INDEX._index_file_cache.read_transaction(cache_key) as f:
+                if f is not None:
+                    db._read_from_stream(f)
 
             index_hash_list = set(
                 [
@@ -1015,7 +1055,6 @@ def check_index_fn(args):
             )
 
         for spec_manifest in manifest_files:
-
             # Spec manifests have a naming format
             # <name>-<version>-<hash>.spec.manifest.json
             spec_hash = spec_manifest.rsplit("-", 1)[1].split(".", 1)[0]
@@ -1083,6 +1122,8 @@ def check_index_fn(args):
 def update_index_fn(args):
     """update a buildcache index or index view if extra arguments are provided."""
 
+    t = timer_mod.Timer() if tty.is_verbose() else timer_mod.NullTimer()
+
     update_view_index = (
         args.append or args.force or args.name or args.sources or args.mirror.push_view
     )
@@ -1103,7 +1144,12 @@ def update_index_fn(args):
             yes_to_all=args.yes_to_all,
         )
     else:
-        return update_index(args.mirror, update_keys=args.keys)
+        update_index(args.mirror, update_keys=args.keys, timer=t)
+
+    if tty.is_verbose():
+        tty.msg("Timing summary:")
+        t.stop()
+        t.write_tty()
 
 
 def migrate_fn(args):

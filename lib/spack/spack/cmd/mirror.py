@@ -364,7 +364,7 @@ def mirror_add(args):
 def mirror_remove(args):
     """remove a mirror by name"""
     name = args.name
-    scopes = [args.scope] if args.scope else list(spack.config.CONFIG.scopes.keys())
+    scopes = [args.scope] if args.scope else reversed(list(spack.config.CONFIG.scopes.keys()))
 
     removed = False
     for scope in scopes:
@@ -588,8 +588,9 @@ def versions_per_spec(args):
             num_versions = int(args.versions_per_spec)
         except ValueError:
             raise SpackError(
-                "'--versions-per-spec' must be a number or 'all',"
-                " got '{0}'".format(args.versions_per_spec)
+                "'--versions-per-spec' must be a number or 'all', got '{0}'".format(
+                    args.versions_per_spec
+                )
             )
     return num_versions
 

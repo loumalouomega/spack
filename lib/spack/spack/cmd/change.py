@@ -61,7 +61,7 @@ def change(parser, args):
 
     match_spec = None
     if args.match_spec:
-        match_spec = spack.spec.Spec(args.match_spec)
+        match_spec = spack.cmd.parse_specs([args.match_spec])[0]
     specs = spack.cmd.parse_specs(args.specs)
 
     with env.write_transaction():
@@ -80,7 +80,12 @@ def change(parser, args):
                 raise ValueError(msg) from e
 
         if args.concrete or args.concrete_only:
+            selectors = []
+            mutators = []
             for spec in specs:
-                env.mutate(selector=match_spec or spack.spec.Spec(spec.name), mutator=spec)
+                selectors.append(match_spec or spack.spec.Spec(spec.name))
+                mutators.append(spec)
+
+            env.mutate(selectors=selectors, mutators=mutators)
 
         env.write()

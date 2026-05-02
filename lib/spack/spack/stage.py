@@ -67,7 +67,7 @@ def compute_stage_name(spec):
     else:
         spec_stage_structure += "{name}-{version}"
     # TODO (psakiev, scheibelp) Technically a user could still reintroduce a hash via
-    # config:stage_name. This is a fix for how to handle staging an abstact spec (see #51305)
+    # config:stage_name. This is a fix for how to handle staging an abstract spec (see #51305)
     stage_name_structure = spack.config.get("config:stage_name", default=spec_stage_structure)
     return spec.format_path(format_string=stage_name_structure)
 
@@ -396,7 +396,7 @@ class Stage(AbstractStage):
 
     When used as a context manager, the stage is automatically
     destroyed if no exception is raised by the context. If an
-    excpetion is raised, the stage is left in the filesystem and NOT
+    exception is raised, the stage is left in the filesystem and NOT
     destroyed, for potential reuse later.
 
     You can also use the stage's create/destroy functions manually,
@@ -974,13 +974,16 @@ class DevelopStage(AbstractStage):
         self._source_path = dev_path
 
         # The path of a link that will point to this stage
-        if os.path.isabs(reference_link):
-            link_path = reference_link
+        if reference_link:
+            if os.path.isabs(reference_link):
+                link_path = reference_link
+            else:
+                link_path = os.path.join(self._source_path, reference_link)
+            if not os.path.isdir(os.path.dirname(link_path)):
+                raise StageError(f"The directory containing {link_path} must exist")
+            self.reference_link = link_path
         else:
-            link_path = os.path.join(self._source_path, reference_link)
-        if not os.path.isdir(os.path.dirname(link_path)):
-            raise StageError(f"The directory containing {link_path} must exist")
-        self.reference_link = link_path
+            self.reference_link = None
 
     @property
     def source_path(self):
@@ -1007,10 +1010,11 @@ class DevelopStage(AbstractStage):
 
     def create(self):
         super().create()
-        try:
-            symlink(self.path, self.reference_link)
-        except (AlreadyExistsError, FileExistsError):
-            pass
+        if self.reference_link:
+            try:
+                symlink(self.path, self.reference_link)
+            except (AlreadyExistsError, FileExistsError):
+                pass
 
     def destroy(self):
         # Destroy all files, but do not follow symlinks
@@ -1018,10 +1022,11 @@ class DevelopStage(AbstractStage):
             shutil.rmtree(self.path)
         except FileNotFoundError:
             pass
-        try:
-            os.remove(self.reference_link)
-        except FileNotFoundError:
-            pass
+        if self.reference_link:
+            try:
+                os.remove(self.reference_link)
+            except FileNotFoundError:
+                pass
         self.created = False
 
     def restage(self):

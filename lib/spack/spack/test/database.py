@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """Check the database is functioning properly, both in memory and in its file."""
+
 import contextlib
 import datetime
 import functools
@@ -352,11 +353,13 @@ def test_recursive_upstream_dbs(
         )
 
         assert db_a_from_scratch.db_for_spec_hash(spec.dag_hash()) == (db_a_from_scratch)
-        assert db_a_from_scratch.db_for_spec_hash(spec["y"].dag_hash()) == (
-            upstream_dbs_from_scratch[0]
+        assert (
+            db_a_from_scratch.db_for_spec_hash(spec["y"].dag_hash())
+            == (upstream_dbs_from_scratch[0])
         )
-        assert db_a_from_scratch.db_for_spec_hash(spec["z"].dag_hash()) == (
-            upstream_dbs_from_scratch[1]
+        assert (
+            db_a_from_scratch.db_for_spec_hash(spec["z"].dag_hash())
+            == (upstream_dbs_from_scratch[1])
         )
 
         db_a_from_scratch._check_ref_counts()
@@ -590,6 +593,22 @@ def test_015_write_and_read(mutable_database):
         assert new_rec.spec == rec.spec
         assert new_rec.path == rec.path
         assert new_rec.installed == rec.installed
+
+
+def test_016_roundtrip_spliced_spec(mutable_database):
+    build_spec = spack.concretize.concretize_one("splice-t")
+    replacement = spack.concretize.concretize_one("splice-h+foo")
+    spec = build_spec.splice(replacement)
+
+    spack.store.STORE.db.add(spec)
+    spack.store.STORE.db._state_is_inconsistent = True  # force re-read
+
+    _, spec_record = spack.store.STORE.db.query_by_spec_hash(spec.dag_hash())
+    _, buildspec_record = spack.store.STORE.db.query_by_spec_hash(spec.build_spec.dag_hash())
+
+    assert spec_record.spec == spec
+    assert spec_record.spec.build_spec == spec.build_spec
+    assert buildspec_record  # buildspec needs to be recorded in db
 
 
 def test_017_write_and_read_without_uuid(mutable_database, monkeypatch):
@@ -993,7 +1012,7 @@ def test_mark_failed(mutable_database, monkeypatch, tmp_path: pathlib.Path, capf
     """Add coverage to mark_failed."""
 
     def _raise_exc(lock):
-        raise lk.LockTimeoutError("write", "/mock-lock", 1.234, 10)
+        raise lk.LockTimeoutError(lk.LockType.WRITE, "/mock-lock", 1.234, 10)
 
     with fs.working_dir(str(tmp_path)):
         s = spack.concretize.concretize_one("pkg-a")

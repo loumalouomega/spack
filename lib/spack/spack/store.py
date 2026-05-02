@@ -15,12 +15,13 @@ but we use a fancier directory layout to make browsing the store and
 debugging easier.
 
 """
+
 import contextlib
 import os
 import pathlib
 import re
 import uuid
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union, cast
 
 import spack.config
 import spack.database
@@ -185,6 +186,10 @@ class Store:
             self.root, default_timeout=lock_cfg.package_timeout
         )
 
+    def has_padding(self) -> bool:
+        """Returns True if the store layout includes path padding."""
+        return self.root != self.unpadded_root
+
     def reindex(self) -> None:
         """Convenience function to reindex the store DB with its own layout."""
         return self.db.reindex()
@@ -233,7 +238,7 @@ def _create_global() -> Store:
 
 
 #: Singleton store instance
-STORE: Store = spack.llnl.util.lang.Singleton(_create_global)  # type: ignore
+STORE = cast(Store, spack.llnl.util.lang.Singleton(_create_global))
 
 
 def reinitialize():
@@ -243,7 +248,7 @@ def reinitialize():
     global STORE
 
     token = STORE
-    STORE = spack.llnl.util.lang.Singleton(_create_global)
+    STORE = cast(Store, spack.llnl.util.lang.Singleton(_create_global))
 
     return token
 

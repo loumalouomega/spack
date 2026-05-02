@@ -34,7 +34,7 @@ def setup_parser(subparser: argparse.ArgumentParser):
         "-l", "--local", action="store_true", help="verify only locally installed packages"
     )
     MANIFEST_SUBPARSER.add_argument(
-        "-j", "--json", action="store_true", help="ouptut json-formatted errors"
+        "-j", "--json", action="store_true", help="output json-formatted errors"
     )
     MANIFEST_SUBPARSER.add_argument("-a", "--all", action="store_true", help="verify all packages")
     MANIFEST_SUBPARSER.add_argument(
@@ -93,10 +93,7 @@ def verify_versions(args):
     2. Installed package version not known by the package recipe
     3. Installed package version deprecated in the package recipe
     """
-    if args.specs:
-        specs = args.specs(installed=True)
-    else:
-        specs = spack.store.db.query(installed=True)
+    specs = args.specs(installed=True)
 
     msg_lines = _verify_version(specs)
     if msg_lines:

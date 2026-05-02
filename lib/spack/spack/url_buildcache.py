@@ -159,7 +159,7 @@ class URLBuildcacheEntry:
 
     This class manages access to a versioned buildcache entry by providing
     a means to download both the metadata (spec file) and compressed archive.
-    It also provides methods for accessing the paths/urls associcated with
+    It also provides methods for accessing the paths/urls associated with
     buildcache entries.
 
     Starting with buildcache layout version 3, it is not possible to know
@@ -448,7 +448,7 @@ class URLBuildcacheEntry:
         if self.manifest:
             if not manifest_url or manifest_url == self.remote_manifest_url:
                 # We already have a manifest, so now calling this method without a specific
-                # manifiest url, or with the same one we have internally, then skip reading
+                # manifest url, or with the same one we have internally, then skip reading
                 # again, and just return the manifest we already read.
                 return self.manifest
 
@@ -465,8 +465,7 @@ class URLBuildcacheEntry:
         manifest_contents = ""
 
         try:
-            _, _, manifest_file = web_util.read_from_url(manifest_url)
-            manifest_contents = io.TextIOWrapper(manifest_file, encoding="utf-8").read()
+            manifest_contents = web_util.read_text(manifest_url)
         except (web_util.SpackWebError, OSError) as e:
             raise BuildcacheEntryError(f"Error reading manifest at {manifest_url}") from e
 
@@ -1110,6 +1109,8 @@ def _entries_from_cache_aws_cli(url: str, tmpspecsdir: str, component_type: Buil
     include_pattern = cache_class.get_buildcache_component_include_pattern(component_type)
     component_prefix = cache_class.get_relative_path_components(component_type)
 
+    component_url = url_util.join(url, *component_prefix)
+
     sync_command_args = [
         "s3",
         "sync",
@@ -1117,17 +1118,17 @@ def _entries_from_cache_aws_cli(url: str, tmpspecsdir: str, component_type: Buil
         "*",
         "--include",
         include_pattern,
-        url_util.join(url, *component_prefix),
+        component_url,
         tmpspecsdir,
     ]
 
     # Use aws s3 ls to get mtimes of manifests
-    ls_command_args = ["s3", "ls", "--recursive", url]
+    ls_command_args = ["s3", "ls", "--recursive", component_url]
     s3_ls_regex = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\d+\s+(.+)$")
 
     filename_to_mtime: Dict[str, float] = {}
 
-    tty.debug(f"Using aws s3 sync to download manifests from {url} to {tmpspecsdir}")
+    tty.debug(f"Using aws s3 sync to download manifests from {component_url} to {tmpspecsdir}")
 
     try:
         aws(*sync_command_args, output=os.devnull, error=os.devnull)
@@ -1353,7 +1354,7 @@ def try_verify(specfile_path):
 class MirrorMetadata:
     """Simple class to hold a mirror url and a buildcache layout version
 
-    This class is used by BinaryCacheIndex to produce a key used to keep
+    This class is used by BinaryIndexCache to produce a key used to keep
     track of downloaded/processed buildcache index files from remote mirrors
     in some layout version."""
 
@@ -1379,7 +1380,7 @@ class MirrorMetadata:
         return hash((self.url, self.version, self.view))
 
     @classmethod
-    def from_string(cls, s: str):
+    def from_string(cls, s: str) -> "MirrorMetadata":
         m = re.match(r"^(.*)__v([0-9]+)(?:__(.*))?$", s)
         if not m:
             raise MirrorMetadataError(f"Malformed string {s}")
