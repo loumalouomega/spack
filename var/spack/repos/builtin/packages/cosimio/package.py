@@ -5,7 +5,8 @@
 
 import os
 
-from spack.package import CMakePackage, Executable, shared_library_suffix
+from spack.package import *
+from spack_repo.builtin.build_systems.cmake import CMakePackage
 
 
 class Cosimio(CMakePackage):
